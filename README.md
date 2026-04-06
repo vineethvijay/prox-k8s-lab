@@ -8,11 +8,15 @@ Ansible provisions the VMs and bootstraps the cluster, kubeadm sets up a highly 
 
 ## How It All Works
 
-This project automates a complete Kubernetes homelab from bare metal to running services. The pipeline flows through four stages: **Ansible provisions VMs on Proxmox**, **kubeadm bootstraps an HA K8s cluster**, **ArgoCD takes over for continuous GitOps delivery**, and **29 self-healing applications** run media automation, streaming, DNS, backups, and more — all driven from this single repository.
+This project automates a complete Kubernetes homelab from bare metal to running services. The pipeline flows through four stages: **Ansible provisions VMs on Proxmox**, **kubeadm bootstraps an HA K8s cluster**, **ArgoCD takes over for continuous GitOps delivery**, and **a bunch of self-healing applications** run media automation, streaming, DNS, backups, and more — all driven from this single repository.
 
 ### End-to-End Architecture
 
-> **[View Interactive Animated Architecture Diagram](https://vineethvijay.github.io/prox-k8s-lab/docs/architecture-animation-v2.html)** — best viewed in a desktop browser
+![Architecture Animation](docs/architecture-demo.gif)
+
+> **[View Interactive Version](https://vineethvijay.github.io/prox-k8s-lab/docs/architecture-animation-v2.html)** — best viewed in a desktop browser
+
+#### Diagram 
 
 ```mermaid
 flowchart TB
@@ -130,7 +134,7 @@ flowchart LR
 
 ### GitOps Application Delivery
 
-ArgoCD uses the **App-of-Apps pattern** — one root application auto-discovers and deploys all 29 others:
+ArgoCD uses the **App-of-Apps pattern** — one root application auto-discovers and deploys all others:
 
 ```mermaid
 flowchart TB
@@ -333,63 +337,42 @@ k8s-w2 has two GPUs passed through from Proxmox .11 via VFIO:
 
 ## Quick Start
 
-### 1. Create VMs (run on Proxmox host)
+All provisioning is done via Ansible from your local machine. See `ansible/setup.sh` for initial setup.
 
 ```bash
-ssh root@192.168.1.11 'bash -s' < scripts/01-create-vms.sh
+cd ansible
+
+# Run everything end-to-end (all 13 phases)
+ansible-playbook playbooks/site.yml
+
+# Or run individual phases:
+ansible-playbook playbooks/01-create-vms.yml          # Create VMs via cloud-init
+ansible-playbook playbooks/02-prepare-nodes.yml        # Install containerd, kubeadm, kubelet
+ansible-playbook playbooks/03-init-cluster.yml         # Bootstrap cluster + Calico + join workers
+ansible-playbook playbooks/04-install-monitoring.yml   # Prometheus + Grafana
+ansible-playbook playbooks/05-install-ingress.yml      # MetalLB + NGINX Ingress
+ansible-playbook playbooks/06-add-remote-worker.yml    # Add 2nd Proxmox host nodes
+ansible-playbook playbooks/07-convert-ha.yml           # kube-vip + 3 control planes
+ansible-playbook playbooks/08-install-longhorn-deps.yml
+ansible-playbook playbooks/09-setup-nfs-mounts.yml
+ansible-playbook playbooks/10-add-hosts.yml            # Local DNS (/etc/hosts)
+ansible-playbook playbooks/11-install-argocd.yml       # ArgoCD App-of-Apps
+ansible-playbook playbooks/12-install-proxmox-glances.yml
+ansible-playbook playbooks/13-set-dns.yml              # Pi-hole config
 ```
 
-### 2. Prepare Nodes (run from Mac)
-
-```bash
-bash scripts/02-prepare-nodes.sh
-```
-
-### 3. Initialize Cluster
-
-```bash
-bash scripts/03-init-cluster.sh
-```
-
-### 4. Access the Cluster
+Access the cluster:
 
 ```bash
 export KUBECONFIG=~/.kube/config-proxmox
 kubectl get nodes
 ```
 
-### 5. Expand Cluster (Remote Proxmox)
-
-```bash
-bash scripts/06-add-remote-node.sh
-```
-
-### 6. Convert to HA (3 Control Planes)
-
-```bash
-bash scripts/07-convert-ha.sh
-```
-
-Bootstraps kube-vip at `192.168.1.199`, adds two CP nodes, configures etcd, updates certs, and re-points workers.
-
 ## Teardown
 
 ```bash
-bash scripts/teardown.sh
-```
-
-## SSH Access
-
-```bash
-# Control Planes
-ssh vineethvijay@192.168.1.200  # k8s-cp   (Proxmox .11)
-ssh vineethvijay@192.168.1.205  # k8s-cp2  (Proxmox .8)
-ssh vineethvijay@192.168.1.206  # k8s-cp3  (Proxmox .8)
-
-# Workers
-ssh vineethvijay@192.168.1.201  # k8s-w1   (Proxmox .11)
-ssh vineethvijay@192.168.1.202  # k8s-w2   (Proxmox .11, GPUs)
-ssh vineethvijay@192.168.1.204  # k8s-w4   (Proxmox .8)
+cd ansible
+ansible-playbook playbooks/teardown.yml
 ```
 
 ## Troubleshooting
@@ -402,7 +385,7 @@ ssh vineethvijay@192.168.1.200 "sudo journalctl -u kubelet -f"
 ssh vineethvijay@192.168.1.200 "sudo kubeadm token create --print-join-command"
 
 # Reset a node
-ssh vineethvijay@192.168.1.201 "sudo kubeadm reset -f"
+ansible-playbook ansible/playbooks/remove-node.yml -e "target_node=k8s-w1"
 
 # Check GPU on k8s-w2
 ssh vineethvijay@192.168.1.202 "nvidia-smi; ls /dev/dri/"
