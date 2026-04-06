@@ -1,0 +1,247 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/twin/gatus
+  tag: v5.35.0
+
+containerPort: 8080
+
+persistence:
+  enabled: true
+  existingClaim: gatus-data-nfs
+  mountPath: /data
+
+ingress:
+  enabled: true
+  host: gatus.homelab.local
+  homepage:
+    name: Gatus
+    description: Service Health Dashboard
+    icon: gatus
+    group: Infrastructure
+
+service: {}
+
+resources:
+  requests:
+    memory: 64Mi
+    cpu: 50m
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 30
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+# -- Gatus configuration (config-as-code)
+# Docs: https://github.com/TwiN/gatus#configuration
+gatusConfig:
+  storage:
+    type: sqlite
+    path: /data/data.db
+    caching: true
+
+  announcements:
+    - timestamp: 2026-04-05T00:00:00Z
+      type: information
+      message: "Gatus is now monitoring all homelab services."
+
+  ui:
+    title: Homelab Status
+    header: Homelab Status Page
+    default-sort-by: group
+    buttons:
+      - name: ArgoCD
+        link: http://argocd.homelab.local
+      - name: Longhorn
+        link: http://longhorn.k8s.local
+      - name: Homepage
+        link: http://homepage.homelab.local
+
+  endpoints:
+    # --- Media Services ---
+    - name: Plex
+      group: Media
+      url: http://plex.default.svc.cluster.local:32400/web
+      ui:
+        link: http://plex.homelab.local
+      interval: 60s
+      conditions:
+        - "[STATUS] == 200"
+      alerts:
+        - type: discord
+          enabled: false
+
+    - name: Jellyfin
+      group: Media
+      url: http://jellyfin.default.svc.cluster.local:8096
+      ui:
+        link: http://jellyfin.homelab.local
+      interval: 60s
+      conditions:
+        - "[STATUS] == 200"
+
+    - name: Random Streamer
+      group: Media
+      url: http://random-streamer.default.svc.cluster.local:8081
+      ui:
+        link: http://streamer.homelab.local
+      interval: 60s
+      conditions:
+        - "[STATUS] == 200"
+
+    - name: Tautulli
+      group: Media
+      url: http://tautulli.default.svc.cluster.local:8181
+      ui:
+        link: http://tautulli.homelab.local
+      interval: 60s
+      conditions:
+        - "[STATUS] == 200"
+
+    - name: Jellystat
+      group: Media
+      url: http://jellystat.default.svc.cluster.local:3000
+      ui:
+        link: http://jellystat.homelab.local
+      interval: 60s
+      conditions:
+        - "[STATUS] == 200"
+
+    # --- Download Clients ---
+    - name: Downloader
+      group: Downloads
+      url: http://downloader.default.svc.cluster.local:8080
+      ui:
+        link: http://downloader.homelab.local
+      interval: 60s
+      conditions:
+        - "[STATUS] == 200"
+
+    # --- Arr Stack ---
+    - name: Sonarr
+      group: Arr Stack
+      url: http://sonarr.default.svc.cluster.local:8989
+      ui:
+        link: http://sonarr.homelab.local
+      interval: 60s
+      conditions:
+        - "[STATUS] == 200"
+
+    - name: Radarr
+      group: Arr Stack
+      url: http://radarr.default.svc.cluster.local:7878
+      ui:
+        link: http://radarr.homelab.local
+      interval: 60s
+      conditions:
+        - "[STATUS] == 200"
+
+    - name: Prowlarr
+      group: Arr Stack
+      url: http://prowlarr.default.svc.cluster.local:9696
+      ui:
+        link: http://prowlarr.homelab.local
+      interval: 60s
+      conditions:
+        - "[STATUS] == 200"
+
+    - name: Bazarr
+      group: Arr Stack
+      url: http://bazarr.default.svc.cluster.local:6767
+      ui:
+        link: http://bazarr.homelab.local
+      interval: 60s
+      conditions:
+        - "[STATUS] == 200"
+
+    - name: Seerr
+      group: Arr Stack
+      url: http://seerr.default.svc.cluster.local:5055
+      ui:
+        link: http://seerr.homelab.local
+      interval: 60s
+      conditions:
+        - "[STATUS] == 200"
+
+    # --- Infrastructure ---
+    - name: Vaultwarden
+      group: Infrastructure
+      url: http://vaultwarden.default.svc.cluster.local:80/alive
+      ui:
+        link: http://vaultwarden.homelab.local
+      interval: 60s
+      conditions:
+        - "[STATUS] == 200"
+
+    - name: ArgoCD
+      group: Infrastructure
+      url: https://argocd-server.argocd.svc.cluster.local:443
+      client:
+        insecure: true
+      ui:
+        link: http://argocd.homelab.local
+      interval: 60s
+      conditions:
+        - "[STATUS] == 200"
+
+    - name: NGINX Ingress
+      group: Infrastructure
+      url: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
+      interval: 30s
+      conditions:
+        - "[CONNECTED] == true"
+
+    - name: Kopia
+      group: Infrastructure
+      url: http://kopia-ui.default.svc.cluster.local:51515
+      ui:
+        link: http://kopia.homelab.local
+      interval: 60s
+      conditions:
+        - "[STATUS] == 200"
+
+    # --- Dashboards ---
+    - name: Homepage
+      group: Dashboards
+      url: http://homepage.homepage.svc.cluster.local:3000
+      ui:
+        link: http://homepage.homelab.local
+      interval: 60s
+      conditions:
+        - "[STATUS] == 200"
+
+    - name: Filebrowser
+      group: Dashboards
+      url: http://filebrowser.default.svc.cluster.local:8080
+      ui:
+        link: http://filebrowser.homelab.local
+      interval: 60s
+      conditions:
+        - "[STATUS] == 200"
+
+    # --- External ---
+    - name: Google DNS
+      group: External
+      url: tcp://8.8.8.8:53
+      interval: 120s
+      conditions:
+        - "[CONNECTED] == true"
+
+    - name: Cloudflare DNS
+      group: External
+      url: tcp://1.1.1.1:53
+      interval: 120s
+      conditions:
+        - "[CONNECTED] == true"

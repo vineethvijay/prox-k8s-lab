@@ -1,0 +1,71 @@
+replicaCount: 1
+
+image:
+  repository: linuxserver/bazarr
+  tag: latest
+
+containerPort: 6767
+
+env:
+  PUID: "65534"
+  PGID: "65534"
+  TZ: "Europe/London"
+
+podSecurityContext:
+  fsGroup: 65534
+
+persistence:
+  enabled: true
+  existingClaim: bazarr-config-nfs
+
+ingress:
+  enabled: true
+  host: bazarr.homelab.local
+  homepage:
+    name: Bazarr
+    description: Subtitle Management
+    icon: bazarr
+    group: Media
+
+service: {}
+
+resources:
+  requests:
+    memory: 256Mi
+    cpu: 100m
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+livenessProbe:
+  httpGet:
+    path: /
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 30
+
+readinessProbe:
+  httpGet:
+    path: /
+    port: http
+  initialDelaySeconds: 15
+  periodSeconds: 10
+
+extraVolumeMounts:
+  - name: hdd-int
+    mountPath: /data/media/hdd-internal
+  - name: nas-media
+    mountPath: /data/media/NAS_MEDIA
+  - name: hdd-int
+    mountPath: /data/media/media-filtered/hdd-internal
+    subPath: media-filtered
+
+extraVolumes:
+  - name: hdd-int
+    hostPath:
+      path: /mnt/nfs/hdd-int
+      type: Directory
+  - name: nas-media
+    hostPath:
+      path: /mnt/nfs/nas-media
+      type: Directory

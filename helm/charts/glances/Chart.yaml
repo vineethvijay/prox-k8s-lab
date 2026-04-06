@@ -1,0 +1,5 @@
+apiVersion: v2
+name: glances
+description: Glances system monitoring DaemonSet
+version: 1.0.0
+type: application

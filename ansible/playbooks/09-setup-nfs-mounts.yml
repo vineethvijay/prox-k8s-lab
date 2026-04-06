@@ -1,0 +1,10 @@
+---
+# 09-setup-nfs-mounts.yml — Configure NFS mounts on worker nodes
+#
+# Usage: ansible-playbook playbooks/09-setup-nfs-mounts.yml
+
+- name: Set up NFS mounts on worker nodes
+  hosts: nfs_workers
+  gather_facts: true
+  roles:
+    - nfs-mounts

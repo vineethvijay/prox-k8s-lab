@@ -1,0 +1,28 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kopia-backup
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/youruser/proxmox-k8s.git
+    targetRevision: main
+    path: helm/charts/kopia-backup
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+  ignoreDifferences:
+    - group: ""
+      kind: Secret
+      jsonPointers:
+        - /data
+        - /stringData
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - RespectIgnoreDifferences=true

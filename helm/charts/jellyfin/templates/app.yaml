@@ -1,0 +1,138 @@
+{{- $name := .Chart.Name }}
+{{- if not .Values.persistence.existingClaim }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}-config
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: {{ .Values.persistence.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size }}
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    app: {{ $name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: {{ $name }}
+  template:
+    metadata:
+      labels:
+        app: {{ $name }}
+    spec:
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      containers:
+        - name: {{ $name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          ports:
+            - containerPort: {{ .Values.containerPort }}
+              name: http
+          env:
+            - name: TZ
+              value: {{ .Values.timezone | quote }}
+            - name: JELLYFIN_FFmpeg__probesize
+              value: "50000000"
+            - name: JELLYFIN_FFmpeg__analyzeduration
+              value: "50000000"
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: transcode
+              mountPath: /transcode
+            - name: media-int
+              mountPath: /data/media_INT
+              readOnly: true
+            - name: media-filtered
+              mountPath: /data/media-filtered/hdd-internal
+              readOnly: true
+            - name: nas-media
+              mountPath: /data/media/NAS_MEDIA
+              readOnly: true
+            - name: dri
+              mountPath: /dev/dri
+          securityContext:
+            privileged: true
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim | default (printf "%s-config" $name) }}
+        - name: transcode
+          emptyDir:
+            medium: {{ .Values.transcode.medium }}
+            sizeLimit: {{ .Values.transcode.sizeLimit }}
+        - name: media-int
+          hostPath:
+            path: {{ .Values.nfs.hddInt }}/media
+            type: Directory
+        - name: media-filtered
+          hostPath:
+            path: {{ .Values.nfs.hddInt }}/media-filtered
+            type: Directory
+        - name: nas-media
+          hostPath:
+            path: {{ .Values.nfs.nasMedia }}
+            type: Directory
+        - name: dri
+          hostPath:
+            path: /dev/dri
+            type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    app: {{ $name }}
+spec:
+  type: ClusterIP
+  selector:
+    app: {{ $name }}
+  ports:
+    - port: {{ .Values.servicePort }}
+      targetPort: {{ .Values.containerPort }}
+      name: http
+{{- if .Values.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $name }}-ingress
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    gethomepage.dev/enabled: "true"
+    gethomepage.dev/group: {{ .Values.ingress.homepage.group | quote }}
+    gethomepage.dev/name: {{ .Values.ingress.homepage.name | quote }}
+    gethomepage.dev/description: {{ .Values.ingress.homepage.description | quote }}
+    gethomepage.dev/icon: {{ .Values.ingress.homepage.icon | quote }}
+    gethomepage.dev/pod-selector: {{ printf "app=%s" $name | quote }}
+spec:
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $name }}
+                port:
+                  number: {{ .Values.servicePort }}
+{{- end }}

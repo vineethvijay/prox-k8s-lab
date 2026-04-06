@@ -1,0 +1,5 @@
+apiVersion: v2
+name: kopia-backup
+description: Kopia snapshot-based backup of nfs-hdd PVCs to NAS
+version: 1.0.0
+type: application

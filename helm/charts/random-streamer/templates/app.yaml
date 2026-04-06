@@ -1,0 +1,320 @@
+{{- $name := .Chart.Name }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}-stats
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: {{ .Values.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.stats.size }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    app: {{ $name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: {{ $name }}
+  template:
+    metadata:
+      labels:
+        app: {{ $name }}
+    spec:
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      containers:
+        # ── mediamtx: RTMP ingest + on-demand HLS ──
+        - name: mediamtx
+          image: "{{ .Values.images.mediamtx.repository }}:{{ .Values.images.mediamtx.tag }}"
+          ports:
+            - containerPort: 1935
+              name: rtmp
+            - containerPort: 8888
+              name: hls
+          env:
+            - name: MTX_LOGLEVEL
+              value: "info"
+            - name: MTX_RTMP
+              value: "true"
+            - name: MTX_RTMPADDRESS
+              value: ":1935"
+            - name: MTX_HLS
+              value: "true"
+            - name: MTX_HLSADDRESS
+              value: ":8888"
+            - name: MTX_HLSVARIANT
+              value: "mpegts"
+            - name: MTX_HLSALWAYSREMUX
+              value: "false"
+            - name: MTX_HLSSEGMENTCOUNT
+              value: "7"
+            - name: MTX_HLSSEGMENTDURATION
+              value: "6s"
+            - name: MTX_HLSMUXERCLOSEAFTER
+              value: "60s"
+            - name: MTX_HLSALLOWORIGINS
+              value: "*"
+            - name: MTX_RTSP
+              value: "false"
+            - name: MTX_WEBRTC
+              value: "false"
+            - name: MTX_SRT
+              value: "false"
+            - name: MTX_API
+              value: "false"
+          resources:
+            {{- toYaml .Values.resources.mediamtx | nindent 12 }}
+          livenessProbe:
+            tcpSocket:
+              port: 1935
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 1935
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+        # ── nginx: serves Flutter web UI ──
+        - name: nginx
+          image: "{{ .Values.images.nginx.repository }}:{{ .Values.images.nginx.tag }}"
+          ports:
+            - containerPort: 8080
+              name: ui
+          resources:
+            {{- toYaml .Values.resources.nginx | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+        # ── chunk-generator: creates random video chunks (needs GPU) ──
+        - name: chunk-generator
+          image: "{{ .Values.images.generator.repository }}:{{ .Values.images.generator.tag }}"
+          env:
+            - name: TZ
+              value: {{ .Values.timezone | quote }}
+            - name: CHUNK_DURATION
+              value: {{ .Values.generation.chunkDuration | quote }}
+            - name: CLIP_MIN
+              value: {{ .Values.generation.clipMin | quote }}
+            - name: CLIP_MAX
+              value: {{ .Values.generation.clipMax | quote }}
+            - name: CHUNKS_PER_RUN
+              value: {{ .Values.generation.chunksPerRun | quote }}
+            - name: MAX_CHUNKS
+              value: {{ .Values.generation.maxChunks | quote }}
+            - name: HW_ACCEL
+              value: {{ .Values.generation.hwAccel | quote }}
+            - name: VIDEO_DIR
+              value: "/videos"
+            - name: VIDEO_WALL
+              value: {{ .Values.generation.videoWall | quote }}
+            - name: OUTPUT_DIR
+              value: "/chunks"
+            - name: STATS_DIR
+              value: "/app/stats"
+            - name: TRIGGER_DIR
+              value: "/app/trigger"
+            - name: VIDEO_METADATA_SCRIPT
+              value: "/scripts/video_metadata.py"
+          volumeMounts:
+            - name: videos
+              mountPath: /videos
+              readOnly: true
+            - name: chunks
+              mountPath: /chunks
+            - name: stats
+              mountPath: /app/stats
+            - name: trigger
+              mountPath: /app/trigger
+            - name: work-tmp
+              mountPath: /tmp
+            - name: dri
+              mountPath: /dev/dri
+          securityContext:
+            privileged: true
+          resources:
+            {{- toYaml .Values.resources.generator | nindent 12 }}
+
+        # ── random-video-streamer: Flask API + RTMP clip pusher ──
+        - name: streamer-api
+          image: "{{ .Values.images.api.repository }}:{{ .Values.images.api.tag }}"
+          ports:
+            - containerPort: {{ .Values.ports.api }}
+              name: api
+          env:
+            - name: TZ
+              value: {{ .Values.timezone | quote }}
+            - name: CHUNK_FOLDER
+              value: "/chunks"
+            - name: PORT
+              value: {{ .Values.ports.api | quote }}
+            - name: EXTERNAL_PORT
+              value: {{ .Values.ports.api | quote }}
+            - name: RTMP_URL
+              value: "rtmp://localhost:1935/stream"
+            - name: AUDIO_FOLDER
+              value: "/audio"
+            - name: HLS_PORT
+              value: {{ .Values.ports.hls | quote }}
+            - name: STATS_DIR
+              value: "/app/stats"
+            - name: TRIGGER_DIR
+              value: "/app/trigger"
+          volumeMounts:
+            - name: audio
+              mountPath: /audio
+              readOnly: true
+            - name: chunks
+              mountPath: /chunks
+            - name: stats
+              mountPath: /app/stats
+            - name: trigger
+              mountPath: /app/trigger
+          resources:
+            {{- toYaml .Values.resources.api | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /api/status
+              port: {{ .Values.ports.api }}
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /api/status
+              port: {{ .Values.ports.api }}
+            initialDelaySeconds: 15
+            periodSeconds: 30
+
+      volumes:
+        - name: videos
+          hostPath:
+            path: {{ .Values.videosPath }}
+            type: Directory
+        - name: audio
+          hostPath:
+            path: {{ .Values.audioPath }}
+            type: Directory
+        - name: chunks
+          hostPath:
+            path: {{ .Values.chunksPath }}
+            type: Directory
+        - name: stats
+          persistentVolumeClaim:
+            claimName: {{ $name }}-stats
+        - name: trigger
+          emptyDir: {}
+        - name: work-tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 4Gi
+        - name: dri
+          hostPath:
+            path: /dev/dri
+            type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    app: {{ $name }}
+spec:
+  type: ClusterIP
+  selector:
+    app: {{ $name }}
+  ports:
+    - port: 8081
+      targetPort: {{ .Values.ports.api }}
+      name: api
+    - port: 8082
+      targetPort: 8080
+      name: ui
+    - port: 8888
+      targetPort: 8888
+      name: hls
+{{- if .Values.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $name }}-ingress
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    gethomepage.dev/enabled: "true"
+    gethomepage.dev/group: {{ .Values.ingress.homepage.group | quote }}
+    gethomepage.dev/name: {{ .Values.ingress.homepage.name | quote }}
+    gethomepage.dev/description: {{ .Values.ingress.homepage.description | quote }}
+    gethomepage.dev/icon: {{ .Values.ingress.homepage.icon | quote }}
+    gethomepage.dev/pod-selector: {{ printf "app=%s" $name | quote }}
+spec:
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $name }}
+                port:
+                  number: 8081
+          - path: /iptv.m3u
+            pathType: Exact
+            backend:
+              service:
+                name: {{ $name }}
+                port:
+                  number: 8081
+          - path: /chunks
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $name }}
+                port:
+                  number: 8081
+          - path: /audio
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $name }}
+                port:
+                  number: 8081
+          - path: /stream
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $name }}
+                port:
+                  number: 8888
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $name }}
+                port:
+                  number: 8082
+{{- end }}

@@ -1,0 +1,193 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vpn-credentials
+type: Opaque
+stringData:
+  OPENVPN_USER: {{ .Values.secrets.openvpnUser | quote }}
+  OPENVPN_PASSWORD: {{ .Values.secrets.openvpnPassword | quote }}
+  # WIREGUARD_PRIVATE_KEY: {{ .Values.secrets.wireguardPrivateKey | default "" | quote }}
+{{- if not .Values.existingClaim }}
+{{- if not .Values.existingClaim }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: downloader-config
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: {{ .Values.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.configStorage }}
+{{- end }}
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vpn-downloader
+  labels:
+    app: vpn-downloader
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: vpn-downloader
+  template:
+    metadata:
+      labels:
+        app: vpn-downloader
+    spec:
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      containers:
+        - name: gluetun
+          image: {{ .Values.gluetun.image }}
+          securityContext:
+            privileged: true
+            capabilities:
+              add: [NET_ADMIN]
+          env:
+            - name: TZ
+              value: {{ .Values.timezone | quote }}
+            - name: VPN_SERVICE_PROVIDER
+              value: {{ .Values.gluetun.provider | quote }}
+            - name: VPN_TYPE
+              value: {{ .Values.gluetun.vpnType | quote }}
+            - name: OPENVPN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: vpn-credentials
+                  key: OPENVPN_USER
+            - name: OPENVPN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: vpn-credentials
+                  key: OPENVPN_PASSWORD
+            # - name: WIREGUARD_PRIVATE_KEY
+            #   valueFrom:
+            #     secretKeyRef:
+            #       name: vpn-credentials
+            #       key: WIREGUARD_PRIVATE_KEY
+            # - name: WIREGUARD_ADDRESSES
+            #   value: {{ .Values.gluetun.wireguardAddresses | default "" | quote }}
+            - name: SERVER_COUNTRIES
+              value: {{ .Values.gluetun.serverCountries | quote }}
+            - name: HTTP_CONTROL_SERVER_ADDRESS
+              value: ":3853"
+            - name: FIREWALL_VPN_INPUT_PORTS
+              value: "6881"
+            - name: FIREWALL_OUTBOUND_SUBNETS
+              value: {{ .Values.gluetun.firewallOutboundSubnets | quote }}
+            - name: FIREWALL_INPUT_PORTS
+              value: "8080,3853"
+            - name: DOT
+              value: "off"
+            - name: DNS_ADDRESS
+              value: "1.1.1.1"
+          ports:
+            - containerPort: 8080
+              name: dl-http
+            - containerPort: 6881
+              hostPort: 6881
+              name: download-tcp
+              protocol: TCP
+            - containerPort: 6881
+              hostPort: 6881
+              name: download-udp
+              protocol: UDP
+            - containerPort: 3853
+              name: gluetun-http
+          volumeMounts:
+            - name: tun-device
+              mountPath: /dev/net/tun
+          resources:
+            requests:
+              memory: 128Mi
+              cpu: 50m
+            limits:
+              memory: 512Mi
+        - name: downloader
+          image: {{ .Values.downloader.image }}
+          env:
+            - { name: PUID, value: "1000" }
+            - { name: PGID, value: "1000" }
+            - name: TZ
+              value: {{ .Values.timezone | quote }}
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: downloads
+              mountPath: /data/downloads
+            - name: downloads-incomplete
+              mountPath: /data/downloads-incomplete
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: 100m
+            limits:
+              memory: 1Gi
+      volumes:
+        - name: tun-device
+          hostPath:
+            path: /dev/net/tun
+        - name: config
+          persistentVolumeClaim:
+            claimName: {{ .Values.existingClaim | default "downloader-config" }}
+        - name: downloads
+          hostPath:
+            path: {{ .Values.nfs.hddInt }}/downloads
+            type: Directory
+        - name: downloads-incomplete
+          hostPath:
+            path: {{ .Values.nfs.hddInt }}/downloads-incomplete
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: downloader
+  labels:
+    app: vpn-downloader
+spec:
+  selector:
+    app: vpn-downloader
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
+    - port: 6881
+      targetPort: 6881
+      name: download-tcp
+      protocol: TCP
+{{- if .Values.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: downloader-ingress
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    gethomepage.dev/enabled: "true"
+    gethomepage.dev/group: {{ .Values.ingress.homepage.group | quote }}
+    gethomepage.dev/name: {{ .Values.ingress.homepage.name | quote }}
+    gethomepage.dev/description: {{ .Values.ingress.homepage.description | quote }}
+    gethomepage.dev/icon: {{ .Values.ingress.homepage.icon | quote }}
+    gethomepage.dev/pod-selector: "app=vpn-downloader"
+spec:
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: downloader
+                port:
+                  number: 8080
+{{- end }}

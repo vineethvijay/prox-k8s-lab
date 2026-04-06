@@ -1,0 +1,29 @@
+replicaCount: 1
+
+image:
+  repository: kopia/kopia
+  tag: "20260224.0.42919"
+
+# Kopia repository password — override in values-secret.yaml
+repositoryPassword: "CHANGE_ME"
+
+# NFS: Kopia repository location on NAS
+repository:
+  server: 192.168.1.28
+  path: /data/nas-backups/kopia
+
+ingress:
+  enabled: true
+  host: kopia.homelab.local
+  homepage:
+    name: Kopia
+    description: Backup Browser & Restore
+    icon: kopia
+    group: Infrastructure
+
+resources:
+  requests:
+    memory: 128Mi
+    cpu: 100m
+  limits:
+    memory: 512Mi

@@ -1,0 +1,193 @@
+{{- $name := .Chart.Name }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $name }}-secrets
+type: Opaque
+stringData:
+  POSTGRES_USER: {{ .Values.secrets.postgresUser | quote }}
+  POSTGRES_PASSWORD: {{ .Values.secrets.postgresPassword | quote }}
+  JWT_SECRET: {{ .Values.secrets.jwtSecret | quote }}
+{{- if not .Values.dbExistingClaim }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}-db
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: {{ .Values.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.db.storage }}
+{{- end }}
+{{- if not .Values.backupExistingClaim }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}-backup
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: {{ .Values.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.backupStorage }}
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}-db
+  labels:
+    app: {{ $name }}-db
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: {{ $name }}-db
+  template:
+    metadata:
+      labels:
+        app: {{ $name }}-db
+    spec:
+      containers:
+        - name: postgres
+          image: {{ .Values.db.image }}
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $name }}-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $name }}-secrets
+                  key: POSTGRES_PASSWORD
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: db-data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            {{- toYaml .Values.resources.db | nindent 12 }}
+      volumes:
+        - name: db-data
+          persistentVolumeClaim:
+            claimName: {{ .Values.dbExistingClaim | default (printf "%s-db" $name) }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-db
+  labels:
+    app: {{ $name }}-db
+spec:
+  selector:
+    app: {{ $name }}-db
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    app: {{ $name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: {{ $name }}
+  template:
+    metadata:
+      labels:
+        app: {{ $name }}
+    spec:
+      containers:
+        - name: {{ $name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $name }}-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $name }}-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_IP
+              value: {{ $name }}-db
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $name }}-secrets
+                  key: JWT_SECRET
+            - name: TZ
+              value: {{ .Values.timezone | quote }}
+          volumeMounts:
+            - name: backup-data
+              mountPath: /app/backend/backup-data
+          resources:
+            {{- toYaml .Values.resources.app | nindent 12 }}
+      volumes:
+        - name: backup-data
+          persistentVolumeClaim:
+            claimName: {{ .Values.backupExistingClaim | default (printf "%s-backup" $name) }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    app: {{ $name }}
+spec:
+  selector:
+    app: {{ $name }}
+  ports:
+    - port: 3000
+      targetPort: 3000
+      name: http
+{{- if .Values.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $name }}-ingress
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    gethomepage.dev/enabled: "true"
+    gethomepage.dev/group: {{ .Values.ingress.homepage.group | quote }}
+    gethomepage.dev/name: {{ .Values.ingress.homepage.name | quote }}
+    gethomepage.dev/description: {{ .Values.ingress.homepage.description | quote }}
+    gethomepage.dev/icon: {{ .Values.ingress.homepage.icon | quote }}
+    gethomepage.dev/pod-selector: {{ printf "app=%s" $name | quote }}
+spec:
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $name }}
+                port:
+                  number: 3000
+{{- end }}

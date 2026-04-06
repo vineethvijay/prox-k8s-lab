@@ -1,0 +1,49 @@
+replicaCount: 1
+
+timezone: "Europe/London"
+storageClass: nfs-hdd
+configStorage: 1Gi
+
+vpn:
+  enabled: true
+
+secrets:
+  openvpnUser: "CHANGE_ME"
+  openvpnPassword: "CHANGE_ME"
+
+gluetun:
+  image: qmcgaw/gluetun:latest
+  provider: surfshark
+  vpnType: openvpn
+  serverCountries: UK
+  firewallOutboundSubnets: "10.96.0.0/12,10.244.0.0/16,192.168.1.0/24"
+
+pinchflat:
+  image: ghcr.io/kieraneglin/pinchflat:latest
+  port: 8945
+
+ingress:
+  enabled: true
+  host: pinchflat.homelab.local
+  homepage:
+    name: Pinchflat
+    description: YouTube Downloader
+    icon: pinchflat
+    group: Media
+
+nfs:
+  hddInt: /mnt/nfs/hdd-int
+
+resources:
+  pinchflat:
+    requests:
+      memory: 256Mi
+      cpu: 100m
+    limits:
+      memory: 1Gi
+  gluetun:
+    requests:
+      memory: 128Mi
+      cpu: 50m
+    limits:
+      memory: 256Mi

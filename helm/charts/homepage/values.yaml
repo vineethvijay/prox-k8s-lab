@@ -1,0 +1,248 @@
+image:
+  repository: ghcr.io/gethomepage/homepage
+  tag: latest
+
+serviceAccount:
+  create: true
+
+enableRbac: true
+
+ingress:
+  main:
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - host: homepage.homelab.local
+        paths:
+          - path: /
+            pathType: Prefix
+
+env:
+  - name: HOMEPAGE_ALLOWED_HOSTS
+    value: "homepage.homelab.local"
+
+# Enable Kubernetes Discovery
+config:
+  kubernetes:
+    mode: cluster
+
+  # Top-level widgets
+  widgets:
+    - datetime:
+        text_size: xl
+        format:
+          dateStyle: long
+          timeStyle: short
+          hourCycle: h23
+    - openmeteo:
+        label: London
+        latitude: 51.5074
+        longitude: -0.1278
+        units: metric
+        cache: 5
+
+  services:
+    - Infrastructure:
+        - ArgoCD:
+            icon: argocd.png
+            href: https://argocd.homelab.local
+            description: GitOps CD
+    # - Proxmox Hosts:
+    #     - pve1:
+    #         widget:
+    #           type: glances
+    #           url: http://192.168.1.8:61208
+    #           metric: info
+    #           version: 4
+    #     - pve1 CPU:
+    #         widget:
+    #           type: glances
+    #           url: http://192.168.1.8:61208
+    #           metric: cpu
+    #           version: 4
+    #     - pve1 RAM:
+    #         widget:
+    #           type: glances
+    #           url: http://192.168.1.8:61208
+    #           metric: memory
+    #           version: 4
+    #     - pve1 Temp:
+    #         widget:
+    #           type: glances
+    #           url: http://192.168.1.8:61208
+    #           metric: "sensor:Tctl"
+    #           version: 4
+    #     - pve2:
+    #         widget:
+    #           type: glances
+    #           url: http://192.168.1.11:61208
+    #           metric: info
+    #           version: 4
+    #     - pve2 CPU:
+    #         widget:
+    #           type: glances
+    #           url: http://192.168.1.11:61208
+    #           metric: cpu
+    #           version: 4
+    #     - pve2 RAM:
+    #         widget:
+    #           type: glances
+    #           url: http://192.168.1.11:61208
+    #           metric: memory
+    #           version: 4
+    #     - pve2 Temp:
+    #         widget:
+    #           type: glances
+    #           url: http://192.168.1.11:61208
+    #           metric: "sensor:Package id 0"
+    #           version: 4
+    # - Workers:
+    #     - k8s-w1:
+    #         widget:
+    #           type: glances
+    #           url: http://192.168.1.201:61208
+    #           metric: info
+    #           version: 4
+    #     - k8s-w1 CPU:
+    #         widget:
+    #           type: glances
+    #           url: http://192.168.1.201:61208
+    #           metric: cpu
+    #           version: 4
+    #     - k8s-w1 RAM:
+    #         widget:
+    #           type: glances
+    #           url: http://192.168.1.201:61208
+    #           metric: memory
+    #           version: 4
+    #     - k8s-w2:
+    #         widget:
+    #           type: glances
+    #           url: http://192.168.1.202:61208
+    #           metric: info
+    #           version: 4
+    #     - k8s-w2 CPU:
+    #         widget:
+    #           type: glances
+    #           url: http://192.168.1.202:61208
+    #           metric: cpu
+    #           version: 4
+    #     - k8s-w2 RAM:
+    #         widget:
+    #           type: glances
+    #           url: http://192.168.1.202:61208
+    #           metric: memory
+    #           version: 4
+    #     - k8s-w4:
+    #         widget:
+    #           type: glances
+    #           url: http://192.168.1.204:61208
+    #           metric: info
+    #           version: 4
+    #     - k8s-w4 CPU:
+    #         widget:
+    #           type: glances
+    #           url: http://192.168.1.204:61208
+    #           metric: cpu
+    #           version: 4
+    #     - k8s-w4 RAM:
+    #         widget:
+    #           type: glances
+    #           url: http://192.168.1.204:61208
+    #           metric: memory
+    #           version: 4
+    #     - k8s-w4 GPU:
+    #         widget:
+    #           type: glances
+    #           url: http://192.168.1.204:61208
+    #           metric: gpu
+    #           version: 4
+    # - Control Plane:
+    #     - k8s-cp:
+    #         widget:
+    #           type: glances
+    #           url: http://192.168.1.200:61208
+    #           metric: info
+    #           version: 4
+    #     - k8s-cp CPU:
+    #         widget:
+    #           type: glances
+    #           url: http://192.168.1.200:61208
+    #           metric: cpu
+    #           version: 4
+    #     - k8s-cp RAM:
+    #         widget:
+    #           type: glances
+    #           url: http://192.168.1.200:61208
+    #           metric: memory
+    #           version: 4
+    #     - k8s-cp2:
+    #         widget:
+    #           type: glances
+    #           url: http://192.168.1.205:61208
+    #           metric: info
+    #           version: 4
+    #     - k8s-cp2 CPU:
+    #         widget:
+    #           type: glances
+    #           url: http://192.168.1.205:61208
+    #           metric: cpu
+    #           version: 4
+    #     - k8s-cp2 RAM:
+    #         widget:
+    #           type: glances
+    #           url: http://192.168.1.205:61208
+    #           metric: memory
+    #           version: 4
+    #     - k8s-cp3:
+    #         widget:
+    #           type: glances
+    #           url: http://192.168.1.206:61208
+    #           metric: info
+    #           version: 4
+    #     - k8s-cp3 CPU:
+    #         widget:
+    #           type: glances
+    #           url: http://192.168.1.206:61208
+    #           metric: cpu
+    #           version: 4
+    #     - k8s-cp3 RAM:
+    #         widget:
+    #           type: glances
+    #           url: http://192.168.1.206:61208
+    #           metric: memory
+    #           version: 4
+
+  bookmarks: []
+
+  settingsString: |
+    title: "\U0001F3E0 Homeserver"
+    theme: dark
+    color: neutral
+    hideVersion: true
+    background:
+      blur: xl
+      saturate: 100
+      brightness: 20
+      opacity: 99
+    layout:
+      Infrastructure:
+        style: row
+        columns: 4
+        icon: mdi-server
+      Media:
+        style: row
+        columns: 3
+        icon: mdi-multimedia
+      # Proxmox Hosts:
+      #   style: row
+      #   columns: 4
+      #   icon: mdi-server-security
+      # Workers:
+      #   style: row
+      #   columns: 3
+      #   icon: mdi-desktop-tower-monitor
+      # Control Plane:
+      #   style: row
+      #   columns: 3
+      #   icon: mdi-server-network

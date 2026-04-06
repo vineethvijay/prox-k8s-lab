@@ -1,0 +1,84 @@
+replicaCount: 1
+
+images:
+  mediamtx:
+    repository: bluenviron/mediamtx
+    tag: latest-ffmpeg
+  nginx:
+    repository: 192.168.1.245:5000/random-streamer-nginx
+    tag: latest
+  generator:
+    repository: 192.168.1.245:5000/random-streamer-generator
+    tag: latest
+  api:
+    repository: 192.168.1.245:5000/random-streamer-api
+    tag: latest
+
+nodeSelector:
+  kubernetes.io/hostname: k8s-w2
+
+timezone: "Europe/London"
+
+storageClass: nfs-hdd
+
+persistence:
+  stats:
+    size: 1Gi
+
+# Chunk generation settings
+generation:
+  chunkDuration: 300
+  clipMin: 6
+  clipMax: 6
+  chunksPerRun: 4
+  maxChunks: 56
+  hwAccel: vaapi
+  videoWall: "0"
+
+# Ports
+ports:
+  api: 8081
+  hls: 8080
+
+ingress:
+  enabled: true
+  host: streamer.homelab.local
+  homepage:
+    name: Random Streamer
+    description: Random Video Clips Live Stream
+    icon: mdi-television-play
+    group: Media
+
+resources:
+  mediamtx:
+    requests:
+      memory: 64Mi
+      cpu: 50m
+    limits:
+      memory: 256Mi
+  nginx:
+    requests:
+      memory: 64Mi
+      cpu: 50m
+    limits:
+      memory: 256Mi
+  generator:
+    requests:
+      memory: 512Mi
+      cpu: 500m
+    limits:
+      memory: 4Gi
+  api:
+    requests:
+      memory: 256Mi
+      cpu: 100m
+    limits:
+      memory: 1Gi
+
+nfs:
+  hddInt: /mnt/nfs/hdd-int
+
+# Volume paths on NFS
+videosPath: /mnt/nfs/hdd-int/tube-archiver
+chunksPath: /mnt/nfs/hdd-int/tube-archiver-chunks
+audioPath: /mnt/nfs/hdd-int/music

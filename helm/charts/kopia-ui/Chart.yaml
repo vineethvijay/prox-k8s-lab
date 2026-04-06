@@ -1,0 +1,4 @@
+apiVersion: v2
+name: kopia-ui
+description: Kopia Server UI for browsing and restoring backups
+version: 1.0.0

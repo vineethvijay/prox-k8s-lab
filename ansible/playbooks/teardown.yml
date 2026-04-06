@@ -1,0 +1,52 @@
+---
+# teardown.yml — Destroy all initial cluster VMs (DESTRUCTIVE!)
+#
+# Usage: ansible-playbook playbooks/teardown.yml
+#   Add --extra-vars "confirm_teardown=yes" to skip the prompt
+
+- name: Teardown Kubernetes cluster
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    confirm_teardown: "no"
+    teardown_vmids: [200, 201, 202, 203]
+    pve_host: "192.168.1.11"
+  tasks:
+    - name: Confirm teardown
+      ansible.builtin.pause:
+        prompt: "This will DESTROY VMs {{ teardown_vmids }}. Type 'yes' to confirm"
+      register: user_confirm
+      when: confirm_teardown != "yes"
+
+    - name: Abort if not confirmed
+      ansible.builtin.fail:
+        msg: "Teardown aborted."
+      when:
+        - confirm_teardown != "yes"
+        - user_confirm.user_input != "yes"
+
+    - name: Destroy VMs on Proxmox
+      delegate_to: pve-local
+      ansible.builtin.shell: |
+        for VMID in {{ teardown_vmids | join(' ') }}; do
+          if qm status $VMID &>/dev/null; then
+            qm stop $VMID 2>/dev/null || true
+            sleep 3
+            qm destroy $VMID --purge
+            echo "Destroyed VM $VMID"
+          else
+            echo "VM $VMID does not exist"
+          fi
+        done
+      args:
+        executable: /bin/bash
+
+    - name: Clean up kubeconfig context
+      ansible.builtin.shell: |
+        kubectl config delete-context {{ kubeconfig_context }} 2>/dev/null || true
+        kubectl config delete-cluster kubernetes 2>/dev/null || true
+        kubectl config delete-user kubernetes-admin 2>/dev/null || true
+      args:
+        executable: /bin/bash
+      changed_when: false

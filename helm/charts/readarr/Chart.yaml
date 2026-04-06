@@ -1,0 +1,5 @@
+apiVersion: v2
+name: readarr
+description: Book management and automation
+version: 1.0.0
+type: application

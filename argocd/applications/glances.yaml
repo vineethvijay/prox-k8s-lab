@@ -1,0 +1,21 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: glances
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/youruser/proxmox-k8s.git
+    targetRevision: main
+    path: helm/charts/glances
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: homepage
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

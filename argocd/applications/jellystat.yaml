@@ -1,0 +1,34 @@
+---
+# Secret values (DB creds) injected via values-secret.yaml (gitignored, local only)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: jellystat
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/youruser/proxmox-k8s.git
+    targetRevision: main
+    path: helm/charts/jellystat
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+  ignoreDifferences:
+    - group: ""
+      kind: PersistentVolumeClaim
+      jsonPointers:
+        - /spec/volumeName
+        - /spec/volumeMode
+    - group: ""
+      kind: Secret
+      jsonPointers:
+        - /data
+        - /stringData
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - RespectIgnoreDifferences=true

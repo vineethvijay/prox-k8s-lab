@@ -1,0 +1,9 @@
+namespace: metallb-system
+
+pool:
+  name: homelab-pool
+  addresses:
+    - 192.168.1.240-192.168.1.250
+
+advertisement:
+  name: homelab-advertisement

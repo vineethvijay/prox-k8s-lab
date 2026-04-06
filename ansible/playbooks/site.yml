@@ -1,0 +1,37 @@
+---
+# site.yml — Full cluster deployment (end-to-end)
+# Runs all playbooks in order for a complete cluster setup
+#
+# Usage: ansible-playbook playbooks/site.yml
+#
+# To run individual phases, use the specific playbook files instead.
+
+- name: "Phase 1: Create VMs"
+  ansible.builtin.import_playbook: 01-create-vms.yml
+
+- name: "Phase 2: Prepare nodes"
+  ansible.builtin.import_playbook: 02-prepare-nodes.yml
+
+- name: "Phase 3: Initialize cluster"
+  ansible.builtin.import_playbook: 03-init-cluster.yml
+
+- name: "Phase 4: Install monitoring"
+  ansible.builtin.import_playbook: 04-install-monitoring.yml
+
+- name: "Phase 5: Install ingress"
+  ansible.builtin.import_playbook: 05-install-ingress.yml
+
+- name: "Phase 6: Add remote worker"
+  ansible.builtin.import_playbook: 06-add-remote-worker.yml
+
+- name: "Phase 7: Convert to HA"
+  ansible.builtin.import_playbook: 07-convert-ha.yml
+
+# - name: "Phase 8: Install Longhorn deps"
+#   ansible.builtin.import_playbook: 08-install-longhorn-deps.yml
+
+- name: "Phase 9: Setup NFS mounts"
+  ansible.builtin.import_playbook: 09-setup-nfs-mounts.yml
+
+- name: "Phase 10: Add /etc/hosts entries"
+  ansible.builtin.import_playbook: 10-add-hosts.yml

@@ -1,0 +1,42 @@
+replicaCount: 1
+
+image:
+  repository: lscr.io/linuxserver/plex
+  tag: latest
+
+nodeSelector:
+  kubernetes.io/hostname: k8s-w2
+
+timezone: "Europe/London"
+hostname: "PlexServer-K8s"
+
+loadBalancerIP: "192.168.1.241"
+allowedNetworks: "10.244.0.0/16,10.96.0.0/12,192.168.1.0/24"
+
+persistence:
+  enabled: true
+  existingClaim: plex-config-nfs
+
+transcode:
+  medium: Memory
+  sizeLimit: 4Gi
+
+ingress:
+  enabled: true
+  host: plex.homelab.local
+  homepage:
+    name: Plex
+    description: Media Server
+    icon: plex
+    group: Media
+
+resources:
+  requests:
+    memory: 512Mi
+    cpu: 200m
+  limits:
+    memory: 4Gi
+
+nfs:
+  hddInt: /mnt/nfs/hdd-int
+  nasMedia: /mnt/nfs/nas-media

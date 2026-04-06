@@ -1,0 +1,10 @@
+namespace: headlamp
+
+ingress:
+  enabled: true
+  host: headlamp.k8s.local
+  homepage:
+    name: Headlamp
+    description: Kubernetes Dashboard
+    icon: kubernetes-dashboard
+    group: Infrastructure

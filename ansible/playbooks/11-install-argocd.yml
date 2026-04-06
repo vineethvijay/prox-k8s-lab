@@ -1,0 +1,54 @@
+---
+# 11-install-argocd.yml — Install ArgoCD via Helm
+#
+# Usage: ansible-playbook playbooks/11-install-argocd.yml
+
+- name: Install ArgoCD
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Set kubectl context
+      ansible.builtin.command: kubectl config use-context {{ kubeconfig_context }}
+      changed_when: false
+
+    - name: Add ArgoCD Helm repo
+      kubernetes.core.helm_repository:
+        name: argo
+        repo_url: https://argoproj.github.io/argo-helm
+
+    - name: Install ArgoCD
+      kubernetes.core.helm:
+        name: argocd
+        chart_ref: argo/argo-cd
+        release_namespace: argocd
+        create_namespace: true
+        values_files:
+          - "{{ playbook_dir }}/../../argocd/values.yaml"
+        wait: true
+        timeout: 5m0s
+
+    - name: Wait for ArgoCD server to be ready
+      ansible.builtin.command: >
+        kubectl wait --for=condition=available deployment/argocd-server
+        -n argocd --timeout=120s
+      changed_when: false
+
+    - name: Get ArgoCD initial admin password
+      ansible.builtin.shell: >
+        kubectl get secret argocd-initial-admin-secret -n argocd
+        -o jsonpath="{.data.password}" | base64 --decode
+      register: argocd_pass
+      changed_when: false
+
+    - name: Apply App-of-Apps
+      ansible.builtin.command: kubectl apply -f {{ playbook_dir }}/../../argocd/app-of-apps.yaml
+      changed_when: true
+
+    - name: Show ArgoCD access info
+      ansible.builtin.debug:
+        msg: |
+          ArgoCD UI: https://argocd.homelab.local
+          User: admin
+          Pass: {{ argocd_pass.stdout }}
+          Change the password: argocd account update-password

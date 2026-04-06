@@ -1,0 +1,11 @@
+---
+# 01-create-vms.yml — Provision VMs on Proxmox hosts
+# Creates the initial 4 VMs: 1 control plane + 3 workers
+#
+# Usage: ansible-playbook playbooks/01-create-vms.yml
+
+- name: Create initial cluster VMs on Proxmox
+  hosts: control_plane_init:workers_local
+  gather_facts: false
+  roles:
+    - proxmox-vm

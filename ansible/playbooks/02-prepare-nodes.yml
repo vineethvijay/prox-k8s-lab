@@ -1,0 +1,19 @@
+---
+# 02-prepare-nodes.yml — Prepare all nodes for Kubernetes
+# Installs containerd, kubeadm, kubelet, kubectl on all nodes
+#
+# Usage: ansible-playbook playbooks/02-prepare-nodes.yml
+#   Limit to control plane only:  -l control_plane
+#   Limit to workers only:        -l workers
+
+- name: Prepare control plane nodes
+  hosts: control_plane_init
+  gather_facts: true
+  roles:
+    - k8s-common
+
+- name: Prepare worker nodes
+  hosts: workers_local
+  gather_facts: true
+  roles:
+    - k8s-common

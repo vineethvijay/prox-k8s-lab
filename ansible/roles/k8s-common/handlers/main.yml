@@ -1,0 +1,11 @@
+---
+- name: Reload sysctl
+  become: true
+  ansible.builtin.command: sysctl --system
+  changed_when: false
+
+- name: Restart containerd
+  become: true
+  ansible.builtin.systemd:
+    name: containerd
+    state: restarted

@@ -1,0 +1,34 @@
+replicaCount: 1
+
+image:
+  repository: linuxserver/prowlarr
+  tag: latest
+
+containerPort: 9696
+
+env:
+  PUID: "1000"
+  PGID: "1000"
+  TZ: "Europe/London"
+
+persistence:
+  enabled: true
+  existingClaim: prowlarr-config-nfs
+
+ingress:
+  enabled: true
+  host: prowlarr.homelab.local
+  homepage:
+    name: Prowlarr
+    description: Indexer Management
+    icon: prowlarr
+    group: Media
+
+service: {}
+
+resources:
+  requests:
+    memory: 256Mi
+    cpu: 100m
+  limits:
+    memory: 1Gi

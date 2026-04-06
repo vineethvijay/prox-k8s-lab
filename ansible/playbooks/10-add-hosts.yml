@@ -1,0 +1,35 @@
+---
+# 10-add-hosts.yml — Add ingress domains to Mac's /etc/hosts
+#
+# Usage: ansible-playbook playbooks/10-add-hosts.yml --ask-become-pass
+
+- name: Add ingress DNS entries to local /etc/hosts
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Add ingress domain entries
+      become: true
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        regexp: ".*{{ item }}$"
+        line: "{{ ingress_ip }} {{ item }}"
+        state: present
+      loop: "{{ ingress_domains }}"
+
+    - name: Add Plex entry (dedicated IP)
+      become: true
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        regexp: ".*plex.homelab.local$"
+        line: "{{ plex_ip }} plex.homelab.local"
+        state: present
+
+    - name: Show configured domains
+      ansible.builtin.debug:
+        msg: |
+          DNS entries added. Access your services at:
+          {% for domain in ingress_domains %}
+            - http://{{ domain }}
+          {% endfor %}
+            - http://plex.homelab.local ({{ plex_ip }})

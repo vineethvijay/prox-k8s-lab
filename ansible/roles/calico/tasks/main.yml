@@ -1,0 +1,41 @@
+---
+# calico: Install Calico CNI on the cluster
+
+- name: Check if Calico is already installed
+  ansible.builtin.command: kubectl get ds -n calico-system calico-node
+  register: calico_check
+  failed_when: false
+  changed_when: false
+
+- name: Install Calico operator
+  ansible.builtin.command: >
+    kubectl create -f
+    https://raw.githubusercontent.com/projectcalico/calico/{{ calico_version }}/manifests/tigera-operator.yaml
+  when: calico_check.rc != 0
+
+- name: Apply Calico custom resources
+  when: calico_check.rc != 0
+  ansible.builtin.shell: |
+    cat <<'EOF' | kubectl apply -f -
+    apiVersion: operator.tigera.io/v1
+    kind: Installation
+    metadata:
+      name: default
+    spec:
+      calicoNetwork:
+        ipPools:
+        - name: default-ipv4-ippool
+          blockSize: 26
+          cidr: {{ pod_cidr }}
+          encapsulation: VXLANCrossSubnet
+          natOutgoing: Enabled
+          nodeSelector: all()
+    ---
+    apiVersion: operator.tigera.io/v1
+    kind: APIServer
+    metadata:
+      name: default
+    spec: {}
+    EOF
+  args:
+    executable: /bin/bash

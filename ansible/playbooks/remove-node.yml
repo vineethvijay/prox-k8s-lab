@@ -1,0 +1,39 @@
+---
+# remove-node.yml — Drain, delete, and destroy a K8s node
+#
+# Usage:
+#   ansible-playbook playbooks/remove-node.yml -e target_node=k8s-w3
+#
+# The node must exist in inventory with vmid and pve_host variables.
+
+- name: Remove a node from the cluster and destroy its VM
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    target_node: ""
+  tasks:
+    - name: Validate target_node is set
+      ansible.builtin.fail:
+        msg: "You must specify -e target_node=<node_name>"
+      when: target_node == ""
+
+    - name: Drain node
+      ansible.builtin.command: >
+        kubectl --context {{ kubeconfig_context }} drain {{ target_node }}
+        --ignore-daemonsets --delete-emptydir-data --force
+        --grace-period=60 --timeout=3m
+
+    - name: Delete node from cluster
+      ansible.builtin.command: >
+        kubectl --context {{ kubeconfig_context }} delete node {{ target_node }}
+
+    - name: Destroy VM on Proxmox
+      delegate_to: "{{ hostvars[target_node]['pve_host'] }}"
+      ansible.builtin.shell: |
+        VMID={{ hostvars[target_node]['vmid'] }}
+        qm stop $VMID || true
+        sleep 5
+        qm destroy $VMID --purge
+      args:
+        executable: /bin/bash

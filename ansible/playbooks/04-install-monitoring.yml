@@ -1,0 +1,50 @@
+---
+# 04-install-monitoring.yml — Install kube-prometheus-stack via Helm
+#
+# Usage: ansible-playbook playbooks/04-install-monitoring.yml
+
+- name: Install monitoring stack
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Set kubectl context
+      ansible.builtin.command: kubectl config use-context {{ kubeconfig_context }}
+      changed_when: false
+
+    - name: Add prometheus-community Helm repo
+      kubernetes.core.helm_repository:
+        name: prometheus-community
+        repo_url: https://prometheus-community.github.io/helm-charts
+
+    - name: Create monitoring namespace
+      ansible.builtin.command: >
+        kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Install kube-prometheus-stack
+      kubernetes.core.helm:
+        name: kube-prometheus
+        chart_ref: prometheus-community/kube-prometheus-stack
+        release_namespace: monitoring
+        create_namespace: true
+        values_files:
+          - "{{ monitoring_values_file }}"
+        wait: true
+        timeout: 10m0s
+
+    - name: Get Grafana password
+      ansible.builtin.shell: >
+        kubectl get secret --namespace monitoring kube-prometheus-grafana
+        -o jsonpath="{.data.admin-password}" | base64 --decode
+      register: grafana_pass
+      changed_when: false
+
+    - name: Show Grafana access info
+      ansible.builtin.debug:
+        msg: |
+          Grafana available at http://<any-node-ip>:32000
+          User: admin
+          Pass: {{ grafana_pass.stdout }}

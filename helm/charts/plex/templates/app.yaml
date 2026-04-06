@@ -1,0 +1,170 @@
+{{- $name := .Chart.Name }}
+{{- if not .Values.persistence.existingClaim }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}-config
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: {{ .Values.persistence.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size }}
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    app: {{ $name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: {{ $name }}
+  template:
+    metadata:
+      labels:
+        app: {{ $name }}
+    spec:
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      containers:
+        - name: {{ $name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          ports:
+            - { containerPort: 32400, name: pms, protocol: TCP }
+            - { containerPort: 1900, name: dlna-udp, protocol: UDP }
+            - { containerPort: 32410, name: gdm1, protocol: UDP }
+            - { containerPort: 32412, name: gdm2, protocol: UDP }
+            - { containerPort: 32413, name: gdm3, protocol: UDP }
+            - { containerPort: 32414, name: gdm4, protocol: UDP }
+            - { containerPort: 32469, name: dlna-tcp, protocol: TCP }
+            - { containerPort: 8324, name: companion, protocol: TCP }
+          env:
+            - { name: PUID, value: "1000" }
+            - { name: PGID, value: "1000" }
+            - name: TZ
+              value: {{ .Values.timezone | quote }}
+            - { name: VERSION, value: "docker" }
+            - name: HOSTNAME
+              value: {{ .Values.hostname | quote }}
+            - name: ADVERTISE_IP
+              value: {{ printf "http://%s:32400/" .Values.loadBalancerIP | quote }}
+            - name: ALLOWED_NETWORKS
+              value: {{ .Values.allowedNetworks | quote }}
+            - { name: NVIDIA_VISIBLE_DEVICES, value: "all" }
+            - { name: NVIDIA_DRIVER_CAPABILITIES, value: "all" }
+          volumeMounts:
+            - { name: config, mountPath: /config }
+            - { name: transcode, mountPath: /transcode }
+            - { name: media-int, mountPath: /data/media/hdd-internal, readOnly: true }
+            - { name: media-filtered, mountPath: /data/media-filtered/hdd-internal, readOnly: true }
+            - { name: nas-media, mountPath: /data/media/NAS_MEDIA, readOnly: true }
+            - { name: dri, mountPath: /dev/dri }
+            - { name: nvidia-dev, mountPath: /dev/nvidia0 }
+            - { name: nvidia-ctl, mountPath: /dev/nvidiactl }
+            - { name: nvidia-uvm, mountPath: /dev/nvidia-uvm }
+            - { name: nvidia-uvm-tools, mountPath: /dev/nvidia-uvm-tools }
+            - { name: nvidia-modeset, mountPath: /dev/nvidia-modeset }
+          securityContext:
+            privileged: true
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          readinessProbe:
+            httpGet: { path: /identity, port: 32400 }
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet: { path: /identity, port: 32400 }
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim | default (printf "%s-config" $name) }}
+        - name: transcode
+          emptyDir:
+            medium: {{ .Values.transcode.medium }}
+            sizeLimit: {{ .Values.transcode.sizeLimit }}
+        - name: media-int
+          hostPath: { path: "{{ .Values.nfs.hddInt }}/media", type: Directory }
+        - name: media-filtered
+          hostPath: { path: "{{ .Values.nfs.hddInt }}/media-filtered", type: Directory }
+        - name: nas-media
+          hostPath: { path: "{{ .Values.nfs.nasMedia }}", type: Directory }
+        - name: dri
+          hostPath: { path: /dev/dri, type: Directory }
+        - name: nvidia-dev
+          hostPath: { path: /dev/nvidia0 }
+        - name: nvidia-ctl
+          hostPath: { path: /dev/nvidiactl }
+        - name: nvidia-uvm
+          hostPath: { path: /dev/nvidia-uvm }
+        - name: nvidia-uvm-tools
+          hostPath: { path: /dev/nvidia-uvm-tools }
+        - name: nvidia-modeset
+          hostPath: { path: /dev/nvidia-modeset }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    app: {{ $name }}
+  annotations:
+    metallb.io/loadBalancerIPs: {{ .Values.loadBalancerIP }}
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  selector:
+    app: {{ $name }}
+  ports:
+    - { name: pms, port: 32400, targetPort: 32400, protocol: TCP }
+    - { name: dlna-udp, port: 1900, targetPort: 1900, protocol: UDP }
+    - { name: dlna-tcp, port: 32469, targetPort: 32469, protocol: TCP }
+    - { name: gdm1, port: 32410, targetPort: 32410, protocol: UDP }
+    - { name: gdm2, port: 32412, targetPort: 32412, protocol: UDP }
+    - { name: gdm3, port: 32413, targetPort: 32413, protocol: UDP }
+    - { name: gdm4, port: 32414, targetPort: 32414, protocol: UDP }
+    - { name: companion, port: 8324, targetPort: 8324, protocol: TCP }
+{{- if .Values.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $name }}-ingress
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/client-max-body-size: "0"
+    nginx.ingress.kubernetes.io/websocket-services: {{ $name }}
+    nginx.ingress.kubernetes.io/upstream-hash-by: "$remote_addr"
+    gethomepage.dev/enabled: "true"
+    gethomepage.dev/group: {{ .Values.ingress.homepage.group | quote }}
+    gethomepage.dev/name: {{ .Values.ingress.homepage.name | quote }}
+    gethomepage.dev/description: {{ .Values.ingress.homepage.description | quote }}
+    gethomepage.dev/icon: {{ .Values.ingress.homepage.icon | quote }}
+    gethomepage.dev/pod-selector: {{ printf "app=%s" $name | quote }}
+spec:
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $name }}
+                port:
+                  number: 32400
+{{- end }}

@@ -1,0 +1,71 @@
+---
+# proxmox-vm: Create a VM from cloud-init template on a Proxmox host
+# Delegates to the appropriate Proxmox hypervisor
+
+- name: Check if VM {{ vmid }} already exists
+  ansible.builtin.shell: qm status {{ vmid }}
+  delegate_to: "{{ pve_host }}"
+  register: vm_check
+  failed_when: false
+  changed_when: false
+
+- name: Create VM {{ vmid }} ({{ inventory_hostname }})
+  when: vm_check.rc != 0
+  delegate_to: "{{ pve_host }}"
+  block:
+    - name: Clone from template
+      ansible.builtin.command: >
+        qm clone {{ vm_template_id }} {{ vmid }}
+        --name {{ inventory_hostname }}
+        --full true
+        --storage {{ vm_storage }}
+
+    - name: Set VM resources
+      ansible.builtin.command: >
+        qm set {{ vmid }}
+        --cores {{ vm_cores | default(2) }}
+        --memory {{ vm_memory | default(4096) }}
+
+    - name: Configure cloud-init
+      ansible.builtin.shell: |
+        qm set {{ vmid }} --ciuser {{ vm_ci_user }}
+        qm set {{ vmid }} --ipconfig0 "ip={{ ansible_host }}/24,gw={{ gateway }}"
+        qm set {{ vmid }} --nameserver {{ dns_server }}
+        qm set {{ vmid }} --searchdomain {{ search_domain }}
+
+    - name: Configure SSH keys
+      ansible.builtin.shell: |
+        TMPKEY=$(mktemp)
+        grep -E "^(ssh-rsa|ssh-ed25519|ecdsa-sha2-nistp256)" /root/.ssh/authorized_keys > "$TMPKEY"
+        if [[ -s "$TMPKEY" ]]; then
+          qm set {{ vmid }} --sshkeys "$TMPKEY"
+        fi
+        rm -f "$TMPKEY"
+      args:
+        executable: /bin/bash
+
+    - name: Enable QEMU guest agent
+      ansible.builtin.command: qm set {{ vmid }} --agent enabled=1
+
+    - name: Resize disk
+      ansible.builtin.command: qm disk resize {{ vmid }} scsi0 {{ vm_disk_size }}
+
+- name: Start VM {{ vmid }}
+  delegate_to: "{{ pve_host }}"
+  ansible.builtin.shell: |
+    STATUS=$(qm status {{ vmid }} | awk '{print $2}')
+    if [[ "$STATUS" != "running" ]]; then
+      qm start {{ vmid }}
+      echo "STARTED"
+    else
+      echo "ALREADY_RUNNING"
+    fi
+  args:
+    executable: /bin/bash
+  register: vm_start
+  changed_when: "'STARTED' in vm_start.stdout"
+
+- name: Wait for VM {{ vmid }} to be reachable via SSH
+  ansible.builtin.wait_for_connection:
+    delay: 10
+    timeout: 180

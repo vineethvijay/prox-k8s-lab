@@ -1,0 +1,5 @@
+apiVersion: v2
+name: sabnzbd
+description: Usenet binary newsreader
+version: 1.0.0
+type: application

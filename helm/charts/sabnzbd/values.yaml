@@ -1,0 +1,50 @@
+replicaCount: 0
+
+image:
+  repository: lscr.io/linuxserver/sabnzbd
+  tag: latest
+
+containerPort: 8082
+
+env:
+  PUID: "1000"
+  PGID: "1000"
+  TZ: "Europe/London"
+
+persistence:
+  enabled: true
+  existingClaim: sabnzbd-config-nfs
+
+ingress:
+  enabled: true
+  host: sabnzbd.homelab.local
+  homepage:
+    name: SABnzbd
+    description: Usenet Downloader
+    icon: sabnzbd
+    group: Media
+
+service: {}
+
+resources:
+  requests:
+    memory: 128Mi
+    cpu: 100m
+  limits:
+    memory: 1Gi
+
+extraVolumeMounts:
+  - name: downloads
+    mountPath: /downloads
+  - name: incomplete
+    mountPath: /incomplete-downloads
+
+extraVolumes:
+  - name: downloads
+    hostPath:
+      path: /mnt/nfs/hdd-int/sabnzbd/downloads
+      type: DirectoryOrCreate
+  - name: incomplete
+    hostPath:
+      path: /mnt/nfs/hdd-int/sabnzbd/incomplete
+      type: DirectoryOrCreate

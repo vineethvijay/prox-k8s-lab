@@ -1,0 +1,146 @@
+---
+# 07-convert-ha.yml — Convert to 3-node HA control plane with kube-vip
+#
+# Usage: ansible-playbook playbooks/07-convert-ha.yml
+
+# ── Phase 1-2: Deploy kube-vip and update certs on CP1 ──
+- name: Deploy kube-vip on initial control plane
+  hosts: control_plane_init
+  gather_facts: true
+  roles:
+    - kube-vip
+
+# ── Phase 3: Update kubeadm-config ──
+- name: Update kubeadm-config ConfigMap
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Check if controlPlaneEndpoint is set
+      ansible.builtin.shell: >
+        kubectl --context {{ kubeconfig_context }} get configmap -n kube-system kubeadm-config
+        -o yaml | grep -q "controlPlaneEndpoint:"
+      register: cpe_check
+      failed_when: false
+      changed_when: false
+
+    - name: Patch kubeadm-config with controlPlaneEndpoint
+      when: cpe_check.rc != 0
+      block:
+        - name: Get kubeadm-config
+          ansible.builtin.shell: >
+            kubectl --context {{ kubeconfig_context }} get configmap -n kube-system kubeadm-config -o yaml
+            > /tmp/kubeadm-config.yaml
+
+        - name: Add controlPlaneEndpoint
+          ansible.builtin.lineinfile:
+            path: /tmp/kubeadm-config.yaml
+            insertafter: 'clusterName:'
+            line: '    controlPlaneEndpoint: "{{ kube_vip_address }}:6443"'
+
+        - name: Apply updated kubeadm-config
+          ansible.builtin.command: kubectl --context {{ kubeconfig_context }} apply -f /tmp/kubeadm-config.yaml
+
+        - name: Clean up temp file
+          ansible.builtin.file:
+            path: /tmp/kubeadm-config.yaml
+            state: absent
+
+# ── Phase 4: Re-point workers to VIP ──
+- name: Re-point workers to VIP
+  hosts: workers
+  gather_facts: false
+  vars:
+    cp1_ip: "{{ hostvars[groups['control_plane_init'][0]]['ansible_host'] }}"
+  tasks:
+    - name: Update kubelet.conf to use VIP
+      become: true
+      ansible.builtin.replace:
+        path: /etc/kubernetes/kubelet.conf
+        regexp: "{{ cp1_ip }}"
+        replace: "{{ kube_vip_address }}"
+      notify: restart kubelet
+
+    - name: Update bootstrap-kubelet.conf to use VIP
+      become: true
+      ansible.builtin.replace:
+        path: /etc/kubernetes/bootstrap-kubelet.conf
+        regexp: "{{ cp1_ip }}"
+        replace: "{{ kube_vip_address }}"
+      failed_when: false
+      notify: restart kubelet
+  handlers:
+    - name: Restart kubelet
+      become: true
+      listen: restart kubelet
+      ansible.builtin.systemd:
+        name: kubelet
+        state: restarted
+
+- name: Update local kubeconfig to use VIP
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Set cluster server to VIP
+      ansible.builtin.command: >
+        kubectl config set-cluster kubernetes
+        --server=https://{{ kube_vip_address }}:6443
+
+# ── Phase 5-6: Create new CP VMs ──
+- name: Create new control plane VMs
+  hosts: control_plane_join
+  gather_facts: false
+  roles:
+    - proxmox-vm
+
+# ── Phase 7: Prepare new CP nodes ──
+- name: Prepare new control plane nodes
+  hosts: control_plane_join
+  gather_facts: true
+  roles:
+    - k8s-common
+
+# ── Phase 8: Join new control plane nodes ──
+- name: Get join credentials from CP1
+  hosts: control_plane_init
+  gather_facts: false
+  tasks:
+    - name: Upload certs and get certificate key
+      become: true
+      ansible.builtin.shell: >
+        kubeadm init phase upload-certs --upload-certs | tail -n 1
+      register: cert_key_result
+      changed_when: false
+
+    - name: Generate join command
+      become: true
+      ansible.builtin.command: kubeadm token create --print-join-command
+      register: join_cmd_result
+      changed_when: false
+
+    - name: Store credentials
+      ansible.builtin.set_fact:
+        certificate_key: "{{ cert_key_result.stdout }}"
+        join_command: "{{ join_cmd_result.stdout }}"
+
+- name: Join new control plane nodes
+  hosts: control_plane_join
+  gather_facts: true
+  serial: 1
+  roles:
+    - k8s-control-plane-join
+
+- name: Verify HA cluster
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Show all nodes
+      ansible.builtin.command: kubectl --context {{ kubeconfig_context }} get nodes -o wide
+      register: nodes_output
+      changed_when: false
+
+    - name: Display result
+      ansible.builtin.debug:
+        msg: "{{ nodes_output.stdout_lines }}"

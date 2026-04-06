@@ -1,0 +1,41 @@
+replicaCount: 1
+
+image:
+  repository: jellyfin/jellyfin
+  tag: latest
+
+containerPort: 80
+servicePort: 8096
+
+nodeSelector:
+  kubernetes.io/hostname: k8s-w2
+
+timezone: "Europe/London"
+
+persistence:
+  enabled: true
+  existingClaim: jellyfin-config-nfs
+
+transcode:
+  medium: Memory
+  sizeLimit: 2Gi
+
+ingress:
+  enabled: true
+  host: jellyfin.homelab.local
+  homepage:
+    name: Jellyfin
+    description: Media Server
+    icon: jellyfin
+    group: Media
+
+resources:
+  requests:
+    memory: 512Mi
+    cpu: 250m
+  limits:
+    memory: 2Gi
+
+nfs:
+  hddInt: /mnt/nfs/hdd-int
+  nasMedia: /mnt/nfs/nas-media

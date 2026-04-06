@@ -1,0 +1,94 @@
+replicaCount: 1
+
+image:
+  repository: pihole/pihole
+  tag: "2026.04.0"
+
+containerPort: 80
+
+env:
+  TZ: "Europe/London"
+  FTLCONF_dns_listeningMode: "all"
+  FTLCONF_LOCAL_IPV4: "192.168.1.242"
+
+persistence:
+  enabled: true
+  size: 2Gi
+  storageClass: nfs-hdd
+  mountPath: /etc/pihole
+
+ingress:
+  enabled: true
+  host: pihole.homelab.local
+  tls:
+    enabled: true
+    secretName: pihole-tls
+  homepage:
+    name: Pi-hole
+    description: DNS Ad Blocker
+    icon: pi-hole
+    group: Infrastructure
+
+service:
+  type: LoadBalancer
+  annotations:
+    metallb.io/loadBalancerIPs: "192.168.1.242"
+  port: 80
+  extraPorts:
+    - port: 53
+      targetPort: 53
+      protocol: TCP
+      name: dns-tcp
+    - port: 53
+      targetPort: 53
+      protocol: UDP
+      name: dns-udp
+
+localDns:
+  grafana.homelab.local: "192.168.1.240"
+  longhorn.k8s.local: "192.168.1.240"
+  homepage.homelab.local: "192.168.1.240"
+  homarr.homelab.local: "192.168.1.240"
+  seerr.homelab.local: "192.168.1.240"
+  tautulli.homelab.local: "192.168.1.240"
+  bazarr.homelab.local: "192.168.1.240"
+  jellyfin.homelab.local: "192.168.1.240"
+  jellystat.homelab.local: "192.168.1.240"
+  radarr.homelab.local: "192.168.1.240"
+  sonarr.homelab.local: "192.168.1.240"
+  sabnzbd.homelab.local: "192.168.1.240"
+  readarr.homelab.local: "192.168.1.240"
+  filebrowser.homelab.local: "192.168.1.240"
+  downloader.homelab.local: "192.168.1.240"
+  prowlarr.homelab.local: "192.168.1.240"
+  lidarr.homelab.local: "192.168.1.240"
+  argocd.homelab.local: "192.168.1.240"
+  headlamp.k8s.local: "192.168.1.240"
+  keel.k8s.local: "192.168.1.240"
+  gatus.homelab.local: "192.168.1.240"
+  vaultwarden.homelab.local: "192.168.1.240"
+  pihole.homelab.local: "192.168.1.240"
+  pinchflat.homelab.local: "192.168.1.240"
+  plex.homelab.local: "192.168.1.241"
+
+resources:
+  requests:
+    memory: 128Mi
+    cpu: 100m
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+livenessProbe:
+  httpGet:
+    path: /admin/
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 30
+
+readinessProbe:
+  httpGet:
+    path: /admin/
+    port: http
+  initialDelaySeconds: 15
+  periodSeconds: 10

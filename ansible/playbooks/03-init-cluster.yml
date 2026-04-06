@@ -1,0 +1,90 @@
+---
+# 03-init-cluster.yml — Initialize K8s cluster, install CNI, join workers
+#
+# Usage: ansible-playbook playbooks/03-init-cluster.yml
+
+- name: Initialize control plane
+  hosts: control_plane_init
+  gather_facts: true
+  roles:
+    - k8s-control-plane-init
+    - calico
+  post_tasks:
+    - name: Generate join command
+      ansible.builtin.command: kubeadm token create --print-join-command
+      become: true
+      register: join_cmd_result
+      changed_when: false
+
+    - name: Store join command
+      ansible.builtin.set_fact:
+        join_command: "{{ join_cmd_result.stdout }}"
+
+    - name: Wait for Calico to be ready
+      ansible.builtin.shell: |
+        kubectl get ds -n calico-system calico-node -o jsonpath='{.status.numberReady}' 2>/dev/null || echo "0"
+      register: calico_ready
+      until: calico_ready.stdout | int > 0
+      retries: 30
+      delay: 10
+      changed_when: false
+
+- name: Join worker nodes
+  hosts: workers_local
+  gather_facts: true
+  serial: 1
+  roles:
+    - k8s-worker-join
+
+- name: Copy kubeconfig to local Mac
+  hosts: control_plane_init
+  gather_facts: false
+  tasks:
+    - name: Fetch kubeconfig
+      ansible.builtin.fetch:
+        src: "{{ ansible_env.HOME | default('/home/' + ansible_user) }}/.kube/config"
+        dest: /tmp/proxmox-kubeconfig
+        flat: true
+
+    - name: Merge kubeconfig on Mac
+      delegate_to: localhost
+      ansible.builtin.shell: |
+        # Update server address
+        sed -i.bak 's|https://.*:6443|https://{{ ansible_host }}:6443|' /tmp/proxmox-kubeconfig
+        rm -f /tmp/proxmox-kubeconfig.bak
+
+        # Rename context
+        kubectl config rename-context kubernetes-admin@kubernetes {{ kubeconfig_context }} \
+          --kubeconfig=/tmp/proxmox-kubeconfig 2>/dev/null || true
+
+        # Merge
+        mkdir -p "$HOME/.kube"
+        if [[ -f "$HOME/.kube/config" ]]; then
+          KUBECONFIG="$HOME/.kube/config:/tmp/proxmox-kubeconfig" \
+            kubectl config view --flatten > /tmp/merged-kc.yaml
+          mv /tmp/merged-kc.yaml "$HOME/.kube/config"
+        else
+          mv /tmp/proxmox-kubeconfig "$HOME/.kube/config"
+        fi
+        chmod 600 "$HOME/.kube/config"
+        rm -f /tmp/proxmox-kubeconfig
+      args:
+        executable: /bin/bash
+
+- name: Verify cluster
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Wait for all nodes to be Ready
+      ansible.builtin.shell: |
+        kubectl --context {{ kubeconfig_context }} get nodes --no-headers | grep -c "NotReady" || echo "0"
+      register: not_ready
+      until: not_ready.stdout | trim == "0"
+      retries: 36
+      delay: 5
+      changed_when: false
+
+    - name: Show cluster status
+      ansible.builtin.command: kubectl --context {{ kubeconfig_context }} get nodes -o wide
+      changed_when: false

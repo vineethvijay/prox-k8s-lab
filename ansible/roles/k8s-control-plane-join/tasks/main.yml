@@ -1,0 +1,16 @@
+---
+# k8s-control-plane-join: Join additional control plane nodes to HA cluster
+
+- name: Check if already joined
+  ansible.builtin.stat:
+    path: /etc/kubernetes/kubelet.conf
+  register: kubelet_conf
+
+- name: Join as control plane node
+  become: true
+  ansible.builtin.command: >
+    {{ hostvars[groups['control_plane_init'][0]]['join_command'] }}
+    --control-plane
+    --certificate-key {{ hostvars[groups['control_plane_init'][0]]['certificate_key'] }}
+    --node-name={{ inventory_hostname }}
+  when: not kubelet_conf.stat.exists

@@ -1,0 +1,39 @@
+---
+# proxmox-glances: Install and configure Glances on Proxmox hosts
+
+- name: Install system packages
+  ansible.builtin.apt:
+    name:
+      - lm-sensors
+      - python3-pip
+    state: present
+    update_cache: true
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+
+- name: Install Glances and py3nvml via pip
+  ansible.builtin.pip:
+    name:
+      - "glances[web]"
+      - py3nvml
+    state: present
+    extra_args: --break-system-packages
+
+- name: Detect Glances binary path
+  ansible.builtin.command: which glances
+  register: glances_bin
+  changed_when: false
+
+- name: Deploy Glances systemd service
+  ansible.builtin.template:
+    src: glances.service.j2
+    dest: /etc/systemd/system/glances.service
+    mode: "0644"
+  notify: Restart Glances
+
+- name: Enable and start Glances
+  ansible.builtin.systemd:
+    name: glances
+    enabled: true
+    state: started
+    daemon_reload: true

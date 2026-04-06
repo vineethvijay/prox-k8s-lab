@@ -1,0 +1,107 @@
+{{- $name := .Chart.Name }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $name }}-repo-password
+type: Opaque
+stringData:
+  password: {{ .Values.repositoryPassword | quote }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $name }}
+spec:
+  schedule: {{ .Values.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 86400
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+          - name: kopia
+            image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+            env:
+            - name: KOPIA_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $name }}-repo-password
+                  key: password
+            command: ["/bin/sh", "-c"]
+            args:
+            - |
+              set -e
+
+              REPO_PATH="/repo"
+              SRC_PATH="/source"
+
+              # Connect or create repository
+              if ! kopia repository connect filesystem --path="$REPO_PATH" 2>/dev/null; then
+                echo "Creating new Kopia repository..."
+                kopia repository create filesystem --path="$REPO_PATH"
+              fi
+
+              echo "Connected to repository."
+              kopia repository status
+
+              # Set retention policy globally
+              kopia policy set --global \
+                --keep-latest {{ .Values.retention.keepLatest }} \
+                --keep-daily {{ .Values.retention.keepDaily }} \
+                --keep-weekly {{ .Values.retention.keepWeekly }} \
+                --keep-monthly {{ .Values.retention.keepMonthly }}
+
+              # Snapshot each PVC directory
+              FAILED=0
+              {{- range .Values.pvcs }}
+              echo "--- Snapshotting {{ . }} ---"
+              if [ -d "$SRC_PATH/{{ . }}" ]; then
+                kopia snapshot create "$SRC_PATH/{{ . }}" || FAILED=$((FAILED + 1))
+              else
+                echo "  WARN: directory not found, skipping"
+              fi
+              {{- end }}
+
+              echo ""
+              echo "=== Snapshot Summary ==="
+              kopia snapshot list --all | tail -20
+
+              if [ "$FAILED" -gt 0 ]; then
+                echo "ERROR: $FAILED snapshot(s) failed"
+                exit 1
+              fi
+
+              echo "All snapshots completed successfully."
+            volumeMounts:
+            - name: source
+              mountPath: /source
+              readOnly: true
+            - name: repo
+              mountPath: /repo
+            - name: kopia-cache
+              mountPath: /root/.cache/kopia
+            - name: kopia-config
+              mountPath: /root/.config/kopia
+            resources:
+              {{- toYaml .Values.resources | nindent 14 }}
+          volumes:
+          - name: source
+            nfs:
+              server: {{ .Values.source.server }}
+              path: {{ .Values.source.path }}
+              readOnly: true
+          - name: repo
+            nfs:
+              server: {{ .Values.destination.server }}
+              path: {{ .Values.destination.path }}
+          - name: kopia-cache
+            emptyDir:
+              sizeLimit: 500Mi
+          - name: kopia-config
+            emptyDir: {}

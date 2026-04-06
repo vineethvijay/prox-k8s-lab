@@ -1,0 +1,5 @@
+apiVersion: v2
+name: jellyfin
+description: Jellyfin media server with GPU transcoding
+version: 1.0.0
+type: application

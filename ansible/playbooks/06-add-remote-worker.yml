@@ -1,0 +1,36 @@
+---
+# 06-add-remote-worker.yml — Provision and join worker k8s-w4 on remote Proxmox
+#
+# Usage: ansible-playbook playbooks/06-add-remote-worker.yml
+
+- name: Create remote worker VM
+  hosts: workers_remote
+  gather_facts: false
+  roles:
+    - proxmox-vm
+
+- name: Prepare remote worker node
+  hosts: workers_remote
+  gather_facts: true
+  roles:
+    - k8s-common
+
+- name: Get join command from control plane
+  hosts: control_plane_init
+  gather_facts: false
+  tasks:
+    - name: Generate join command
+      ansible.builtin.command: kubeadm token create --print-join-command
+      become: true
+      register: join_cmd_result
+      changed_when: false
+
+    - name: Store join command
+      ansible.builtin.set_fact:
+        join_command: "{{ join_cmd_result.stdout }}"
+
+- name: Join remote worker to cluster
+  hosts: workers_remote
+  gather_facts: true
+  roles:
+    - k8s-worker-join

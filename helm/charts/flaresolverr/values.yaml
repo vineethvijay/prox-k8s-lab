@@ -1,0 +1,28 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/flaresolverr/flaresolverr
+  tag: latest
+
+containerPort: 8191
+
+env:
+  LOG_LEVEL: "info"
+  LOG_HTML: "false"
+  CAPTCHA_SOLVER: "none"
+  TZ: "Europe/London"
+
+persistence:
+  enabled: false
+
+ingress:
+  enabled: false
+
+service: {}
+
+resources:
+  requests:
+    memory: 256Mi
+    cpu: 100m
+  limits:
+    memory: 1Gi

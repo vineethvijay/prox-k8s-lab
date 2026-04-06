@@ -1,0 +1,5 @@
+apiVersion: v2
+name: jellystat
+description: Jellyfin statistics dashboard with PostgreSQL
+version: 1.0.0
+type: application

@@ -1,0 +1,9 @@
+namespace: longhorn-system
+
+ingress:
+  host: longhorn.k8s.local
+  homepage:
+    name: Longhorn
+    description: Distributed Storage
+    icon: longhorn
+    group: Infrastructure

@@ -1,0 +1,29 @@
+---
+# Homepage uses the upstream jameswynn Helm chart, not a local chart.
+# Repo: https://jameswynn.github.io/helm-charts
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: homepage
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://jameswynn.github.io/helm-charts
+      chart: homepage
+      targetRevision: "*"
+      helm:
+        valueFiles:
+          - $values/helm/charts/homepage/values.yaml
+    - repoURL: https://github.com/youruser/proxmox-k8s.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: homepage
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

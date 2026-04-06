@@ -1,0 +1,16 @@
+nfs-subdir-external-provisioner:
+  nfs:
+    server: 192.168.1.28
+    path: /data/nas-longhorn
+    mountOptions:
+      - nfsvers=3
+      - hard
+      - intr
+      - noatime
+      - async
+  storageClass:
+    name: nfs-nas
+    defaultClass: false
+    reclaimPolicy: Retain
+    onDelete: retain
+    pathPattern: "${.PVC.namespace}-${.PVC.name}"

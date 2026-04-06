@@ -1,0 +1,10 @@
+---
+# 12-install-proxmox-glances.yml — Install Glances on Proxmox hypervisors
+#
+# Usage: ansible-playbook playbooks/12-install-proxmox-glances.yml
+
+- name: Install Glances on Proxmox hosts
+  hosts: proxmox
+  gather_facts: false
+  roles:
+    - proxmox-glances

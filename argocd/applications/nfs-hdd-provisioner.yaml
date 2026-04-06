@@ -1,0 +1,21 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nfs-hdd-provisioner
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/youruser/proxmox-k8s.git
+    targetRevision: main
+    path: helm/charts/nfs-hdd-provisioner
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: nfs-hdd-provisioner
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

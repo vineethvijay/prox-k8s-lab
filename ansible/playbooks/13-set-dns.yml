@@ -1,0 +1,59 @@
+---
+# 13-set-dns.yml — Set Pi-hole as primary DNS on all servers
+#
+# Usage: ansible-playbook playbooks/13-set-dns.yml --ask-become-pass
+#
+# Sets DNS to Pi-hole (192.168.1.242) with Google (8.8.8.8) as fallback
+# on all Proxmox hosts and Kubernetes nodes.
+
+- name: Set DNS on Proxmox hosts
+  hosts: proxmox
+  gather_facts: false
+  tasks:
+    - name: Configure /etc/resolv.conf
+      ansible.builtin.copy:
+        content: |
+          # Managed by Ansible — Pi-hole DNS
+          search {{ search_domain }}
+          nameserver {{ dns_servers[0] }}
+          nameserver {{ dns_servers[1] }}
+        dest: /etc/resolv.conf
+        owner: root
+        group: root
+        mode: "0644"
+
+- name: Set DNS on Kubernetes nodes (netplan)
+  hosts: k8s
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Update netplan DNS config
+      ansible.builtin.shell: |
+        NETPLAN_FILE=$(ls /etc/netplan/*.yaml 2>/dev/null | head -1)
+        if [ -z "$NETPLAN_FILE" ]; then
+          echo "No netplan config found" && exit 1
+        fi
+
+        # Use Python to safely update the YAML nameservers
+        python3 -c "
+        import yaml, sys
+        with open('$NETPLAN_FILE') as f:
+            data = yaml.safe_load(f)
+        for iface in data.get('network', {}).get('ethernets', {}).values():
+            ns = iface.get('nameservers', {})
+            ns['addresses'] = ['192.168.1.242', '8.8.8.8']
+        with open('$NETPLAN_FILE', 'w') as f:
+            yaml.dump(data, f, default_flow_style=False)
+        "
+        netplan apply
+      register: netplan_result
+      changed_when: netplan_result.rc == 0
+
+    - name: Verify DNS resolution
+      ansible.builtin.command: resolvectl status
+      register: resolv_status
+      changed_when: false
+
+    - name: Show DNS config
+      ansible.builtin.debug:
+        msg: "{{ resolv_status.stdout_lines | select('search', 'DNS Server|DNS Domain') | list }}"

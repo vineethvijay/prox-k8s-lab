@@ -1,0 +1,5 @@
+apiVersion: v2
+name: docker-registry
+description: Local Docker registry for homelab container images
+version: 1.0.0
+type: application

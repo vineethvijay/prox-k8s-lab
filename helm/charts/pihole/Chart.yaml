@@ -1,0 +1,5 @@
+apiVersion: v2
+name: pihole
+description: Network-wide ad blocker (Pi-hole DNS)
+version: 1.0.0
+type: application

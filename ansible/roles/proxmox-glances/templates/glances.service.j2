@@ -1,0 +1,11 @@
+[Unit]
+Description=Glances monitoring server
+After=network.target
+
+[Service]
+ExecStart={{ glances_bin.stdout }} -w --enable-plugin sensors --enable-plugin gpu
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

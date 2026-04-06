@@ -1,0 +1,67 @@
+---
+# kube-vip: Deploy kube-vip for HA control plane
+
+- name: Check if kube-vip is already deployed
+  ansible.builtin.stat:
+    path: /etc/kubernetes/manifests/kube-vip.yaml
+  register: kube_vip_manifest
+
+- name: Deploy kube-vip
+  become: true
+  when: not kube_vip_manifest.stat.exists
+  block:
+    - name: Pull kube-vip image
+      ansible.builtin.command: >
+        ctr image pull --platform linux/amd64
+        ghcr.io/kube-vip/kube-vip:{{ kube_vip_version }}
+
+    - name: Generate kube-vip static pod manifest
+      ansible.builtin.shell: |
+        ctr run --rm --net-host \
+          ghcr.io/kube-vip/kube-vip:{{ kube_vip_version }} vip \
+          /kube-vip manifest pod \
+          --interface {{ kube_vip_interface }} \
+          --address {{ kube_vip_address }} \
+          --controlplane \
+          --services \
+          --arp \
+          --leaderElection > /etc/kubernetes/manifests/kube-vip.yaml
+      args:
+        executable: /bin/bash
+
+    - name: Wait for VIP to bind
+      ansible.builtin.wait_for:
+        host: "{{ kube_vip_address }}"
+        port: 6443
+        delay: 5
+        timeout: 60
+
+- name: Update apiserver certificates for VIP
+  become: true
+  block:
+    - name: Check if VIP is in apiserver cert
+      ansible.builtin.shell: >
+        openssl x509 -in /etc/kubernetes/pki/apiserver.crt -text
+        | grep -q "{{ kube_vip_address }}"
+      register: cert_check
+      failed_when: false
+      changed_when: false
+
+    - name: Regenerate apiserver certificates with VIP SAN
+      when: cert_check.rc != 0
+      ansible.builtin.shell: |
+        mv /etc/kubernetes/pki/apiserver.{crt,key} ~/
+        kubeadm init phase certs apiserver \
+          --apiserver-advertise-address={{ ansible_host }} \
+          --apiserver-cert-extra-sans={{ kube_vip_address }}
+        touch /etc/kubernetes/manifests/kube-apiserver.yaml
+      args:
+        executable: /bin/bash
+
+    - name: Wait for apiserver to restart
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host }}"
+        port: 6443
+        delay: 5
+        timeout: 60
+      when: cert_check.rc != 0

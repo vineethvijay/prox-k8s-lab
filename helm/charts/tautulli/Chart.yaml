@@ -1,0 +1,5 @@
+apiVersion: v2
+name: tautulli
+description: Plex media server monitoring
+version: 1.0.0
+type: application

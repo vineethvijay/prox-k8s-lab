@@ -1,0 +1,36 @@
+replicaCount: 1
+
+nodeSelector:
+  kubernetes.io/hostname: k8s-w4
+
+timezone: "Europe/London"
+existingClaim: downloader-config-nfs
+
+# -- Secrets: override via --set or values-secret.yaml
+secrets:
+  openvpnUser: "CHANGE_ME"
+  openvpnPassword: "CHANGE_ME"
+  # wireguardPrivateKey: "CHANGE_ME"
+
+gluetun:
+  image: qmcgaw/gluetun:latest
+  provider: surfshark
+  vpnType: openvpn
+  # wireguardAddresses: "10.14.0.2/16"
+  serverCountries: UK
+  firewallOutboundSubnets: "10.96.0.0/12,10.244.0.0/16,192.168.1.0/24"
+
+downloader:
+  image: linuxserver/qbittorrent:latest
+
+ingress:
+  enabled: true
+  host: downloader.homelab.local
+  homepage:
+    name: Downloader
+    description: Download Client (VPN)
+    icon: downloader
+    group: Media
+
+nfs:
+  hddInt: /mnt/nfs/hdd-int

@@ -1,0 +1,10 @@
+---
+# 08-install-longhorn-deps.yml — Install Longhorn prerequisites on all K8s nodes
+#
+# Usage: ansible-playbook playbooks/08-install-longhorn-deps.yml
+
+- name: Install Longhorn dependencies on all K8s nodes
+  hosts: k8s
+  gather_facts: true
+  roles:
+    - longhorn-deps

@@ -1,0 +1,197 @@
+{{- if .Values.vpn.enabled }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pinchflat-vpn-credentials
+type: Opaque
+stringData:
+  OPENVPN_USER: {{ .Values.secrets.openvpnUser | quote }}
+  OPENVPN_PASSWORD: {{ .Values.secrets.openvpnPassword | quote }}
+{{- end }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pinchflat-config
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: {{ .Values.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.configStorage }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pinchflat-ytdlp-config
+data:
+  base-config.txt: |
+    # Format: best video <=1080p/60fps + best audio, fallback to best combined
+    --format "bv*[height<=1080][fps<=60]+ba/b"
+
+    # Prefer h264 video, 1080p, AAC audio
+    --format-sort "vcodec:h264,res:1080,acodec:aac"
+
+    # Output as MP4
+    --merge-output-format mp4
+
+    # Write video metadata JSON sidecar
+    --write-info-json
+
+    # Write video description to .description file
+    --write-description
+
+    # Write thumbnail
+    --write-thumbnail
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pinchflat
+  labels:
+    app: pinchflat
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: pinchflat
+  template:
+    metadata:
+      labels:
+        app: pinchflat
+    spec:
+      initContainers:
+        - name: seed-ytdlp-config
+          image: busybox:latest
+          command:
+            - sh
+            - -c
+            - |
+              mkdir -p /config/extras/yt-dlp-configs
+              cp /ytdlp-config/base-config.txt /config/extras/yt-dlp-configs/base-config.txt
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: ytdlp-config
+              mountPath: /ytdlp-config
+      containers:
+        {{- if .Values.vpn.enabled }}
+        - name: gluetun
+          image: {{ .Values.gluetun.image }}
+          securityContext:
+            privileged: true
+            capabilities:
+              add: [NET_ADMIN]
+          env:
+            - name: TZ
+              value: {{ .Values.timezone | quote }}
+            - name: VPN_SERVICE_PROVIDER
+              value: {{ .Values.gluetun.provider | quote }}
+            - name: VPN_TYPE
+              value: {{ .Values.gluetun.vpnType | quote }}
+            - name: OPENVPN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: pinchflat-vpn-credentials
+                  key: OPENVPN_USER
+            - name: OPENVPN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: pinchflat-vpn-credentials
+                  key: OPENVPN_PASSWORD
+            - name: SERVER_COUNTRIES
+              value: {{ .Values.gluetun.serverCountries | quote }}
+            - name: FIREWALL_OUTBOUND_SUBNETS
+              value: {{ .Values.gluetun.firewallOutboundSubnets | quote }}
+            - name: FIREWALL_INPUT_PORTS
+              value: "8945"
+            - name: DOT
+              value: "off"
+            - name: DNS_ADDRESS
+              value: "1.1.1.1"
+          ports:
+            - containerPort: {{ .Values.pinchflat.port }}
+              name: http
+          volumeMounts:
+            - name: tun-device
+              mountPath: /dev/net/tun
+          resources:
+            {{- toYaml .Values.resources.gluetun | nindent 12 }}
+        {{- end }}
+        - name: pinchflat
+          image: {{ .Values.pinchflat.image }}
+          env:
+            - name: TZ
+              value: {{ .Values.timezone | quote }}
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: downloads
+              mountPath: /downloads
+          {{- if not .Values.vpn.enabled }}
+          ports:
+            - containerPort: {{ .Values.pinchflat.port }}
+              name: http
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources.pinchflat | nindent 12 }}
+      volumes:
+        {{- if .Values.vpn.enabled }}
+        - name: tun-device
+          hostPath:
+            path: /dev/net/tun
+        {{- end }}
+        - name: config
+          persistentVolumeClaim:
+            claimName: pinchflat-config
+        - name: downloads
+          hostPath:
+            path: {{ .Values.nfs.hddInt }}/tube-archiver
+            type: Directory
+        - name: ytdlp-config
+          configMap:
+            name: pinchflat-ytdlp-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pinchflat
+  labels:
+    app: pinchflat
+spec:
+  selector:
+    app: pinchflat
+  ports:
+    - port: {{ .Values.pinchflat.port }}
+      targetPort: {{ .Values.pinchflat.port }}
+      name: http
+{{- if .Values.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pinchflat-ingress
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    gethomepage.dev/enabled: "true"
+    gethomepage.dev/group: {{ .Values.ingress.homepage.group | quote }}
+    gethomepage.dev/name: {{ .Values.ingress.homepage.name | quote }}
+    gethomepage.dev/description: {{ .Values.ingress.homepage.description | quote }}
+    gethomepage.dev/icon: {{ .Values.ingress.homepage.icon | quote }}
+    gethomepage.dev/pod-selector: "app=pinchflat"
+spec:
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pinchflat
+                port:
+                  number: {{ .Values.pinchflat.port }}
+{{- end }}

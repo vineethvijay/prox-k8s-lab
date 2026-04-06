@@ -1,0 +1,68 @@
+replicaCount: 1
+
+image:
+  repository: linuxserver/radarr
+  tag: latest
+
+containerPort: 7878
+
+env:
+  PUID: "1000"
+  PGID: "1000"
+  TZ: "Europe/London"
+
+persistence:
+  enabled: true
+  existingClaim: radarr-config-nfs
+
+ingress:
+  enabled: true
+  host: radarr.homelab.local
+  homepage:
+    name: Radarr
+    description: Movie Management
+    icon: radarr
+    group: Media
+
+service: {}
+
+resources:
+  requests:
+    memory: 256Mi
+    cpu: 100m
+  limits:
+    memory: 1Gi
+
+extraVolumeMounts:
+  - name: media-int
+    mountPath: /data/media/hdd-internal
+  - name: nas-media
+    mountPath: /data/media/NAS_MEDIA
+  - name: media-filtered
+    mountPath: /data/media/media-filtered/hdd-internal
+  - name: downloads
+    mountPath: /data/downloads
+  - name: downloads-movies
+    mountPath: /downloads/movies
+
+extraVolumes:
+  - name: media-int
+    hostPath:
+      path: /mnt/nfs/hdd-int/media
+      type: Directory
+  - name: nas-media
+    hostPath:
+      path: /mnt/nfs/nas-media
+      type: Directory
+  - name: media-filtered
+    hostPath:
+      path: /mnt/nfs/hdd-int/media-filtered
+      type: Directory
+  - name: downloads
+    hostPath:
+      path: /mnt/nfs/hdd-int/downloads
+      type: Directory
+  - name: downloads-movies
+    hostPath:
+      path: /mnt/nfs/hdd-int/sabnzbd/downloads/movies
+      type: DirectoryOrCreate

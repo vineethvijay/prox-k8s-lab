@@ -1,0 +1,67 @@
+# Kopia backup configuration
+# Backs up all nfs-hdd PVC data to a Kopia repository on NAS
+
+image:
+  repository: kopia/kopia
+  tag: "20260224.0.42919"
+
+schedule: "0 */6 * * *"  # every 6 hours
+
+# Kopia repository password — override in values-secret.yaml
+repositoryPassword: "CHANGE_ME"
+
+# NFS source: where PVC data lives (nfs-hdd provisioner path)
+source:
+  server: 192.168.1.11
+  path: /data/hdd-internal/k8s-data
+  mountOptions:
+    - nfsvers=4.2
+    - hard
+    - intr
+    - noatime
+    - ro
+
+# NFS destination: Kopia repository location on NAS
+destination:
+  server: 192.168.1.28
+  path: /data/nas-backups/kopia
+  mountOptions:
+    - nfsvers=3
+    - hard
+    - intr
+    - noatime
+
+# Retention policy
+retention:
+  keepLatest: 7
+  keepDaily: 7
+  keepWeekly: 4
+  keepMonthly: 3
+
+# PVC directories to back up (subdirs under source path)
+# Format matches nfs-hdd pathPattern: default-<pvc-name>
+pvcs:
+  - default-bazarr-config-nfs
+  - default-filebrowser-config-nfs
+  - default-gatus-data-nfs
+  - default-homarr-config-nfs
+  - default-jellyfin-config-nfs
+  - default-jellystat-backup-nfs
+  - default-jellystat-db-nfs
+  - default-lidarr-config-nfs
+  - default-plex-config-nfs
+  - default-prowlarr-config-nfs
+  - default-downloader-config-nfs
+  - default-radarr-config-nfs
+  - default-readarr-config-nfs
+  - default-sabnzbd-config-nfs
+  - default-seerr-config-nfs
+  - default-sonarr-config-nfs
+  - default-tautulli-config-nfs
+
+resources:
+  requests:
+    memory: 128Mi
+    cpu: 100m
+  limits:
+    memory: 512Mi

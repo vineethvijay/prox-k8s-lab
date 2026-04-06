@@ -1,0 +1,22 @@
+---
+# longhorn-deps: Install Longhorn storage prerequisites
+
+- name: Install Longhorn dependencies
+  become: true
+  ansible.builtin.apt:
+    name:
+      - open-iscsi
+      - nfs-common
+      - jq
+      - cryptsetup
+    state: present
+    update_cache: true
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+
+- name: Enable and start iscsid
+  become: true
+  ansible.builtin.systemd:
+    name: iscsid
+    enabled: true
+    state: started

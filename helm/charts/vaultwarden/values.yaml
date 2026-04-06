@@ -1,0 +1,58 @@
+replicaCount: 1
+
+image:
+  repository: vaultwarden/server
+  tag: 1.32.7
+
+containerPort: 80
+
+env:
+  TZ: "Europe/London"
+  DOMAIN: "https://vaultwarden.homelab.local"
+  SIGNUPS_ALLOWED: "true"
+  INVITATIONS_ALLOWED: "true"
+  SHOW_PASSWORD_HINT: "false"
+  ROCKET_WORKERS: "2"
+
+persistence:
+  enabled: true
+  existingClaim: vaultwarden-data-nfs
+  size: 2Gi
+  storageClass: nfs-nas
+  mountPath: /data
+
+ingress:
+  enabled: true
+  host: vaultwarden.homelab.local
+  tls:
+    enabled: true
+    secretName: vaultwarden-tls
+  homepage:
+    name: Vaultwarden
+    description: Password Manager
+    icon: vaultwarden
+    group: Infrastructure
+
+service: {}
+
+resources:
+  requests:
+    memory: 64Mi
+    cpu: 50m
+  limits:
+    cpu: 300m
+    memory: 256Mi
+
+livenessProbe:
+  httpGet:
+    path: /alive
+    port: http
+  initialDelaySeconds: 15
+  periodSeconds: 30
+
+readinessProbe:
+  httpGet:
+    path: /alive
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10

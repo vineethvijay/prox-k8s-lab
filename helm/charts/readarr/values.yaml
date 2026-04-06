@@ -1,0 +1,62 @@
+replicaCount: 0
+
+image:
+  repository: linuxserver/readarr
+  tag: 0.4.18-develop
+
+containerPort: 8787
+
+env:
+  PUID: "1000"
+  PGID: "1000"
+  TZ: "Europe/London"
+
+persistence:
+  enabled: true
+  existingClaim: readarr-config-nfs
+
+ingress:
+  enabled: true
+  host: readarr.homelab.local
+  homepage:
+    name: Readarr
+    description: Book Management
+    icon: readarr
+    group: Media
+
+service: {}
+
+resources:
+  requests:
+    memory: 256Mi
+    cpu: 100m
+  limits:
+    memory: 1Gi
+
+extraVolumeMounts:
+  - name: media-int
+    mountPath: /data/media/hdd-internal
+  - name: nas-media
+    mountPath: /data/media/NAS_MEDIA
+  - name: downloads
+    mountPath: /downloads
+  - name: downloads
+    mountPath: /data/downloads
+
+extraVolumes:
+  - name: media-int
+    hostPath:
+      path: /mnt/nfs/hdd-int/media
+      type: Directory
+  - name: nas-media
+    hostPath:
+      path: /mnt/nfs/nas-media
+      type: Directory
+  - name: downloads
+    hostPath:
+      path: /mnt/nfs/hdd-int/sabnzbd/downloads
+      type: DirectoryOrCreate
+  - name: downloads
+    hostPath:
+      path: /mnt/nfs/hdd-int/downloads
+      type: Directory

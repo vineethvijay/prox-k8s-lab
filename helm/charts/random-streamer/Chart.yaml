@@ -1,0 +1,5 @@
+apiVersion: v2
+name: random-streamer
+description: Random Video Clips Streaming Server with GPU encoding (HLS live stream from random video clips)
+version: 1.0.0
+type: application

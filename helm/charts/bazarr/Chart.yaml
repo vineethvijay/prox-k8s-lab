@@ -1,0 +1,5 @@
+apiVersion: v2
+name: bazarr
+description: Subtitle management for Sonarr and Radarr
+version: 1.0.0
+type: application

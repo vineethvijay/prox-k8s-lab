@@ -1,0 +1,44 @@
+replicaCount: 1
+
+image:
+  repository: cyfershepard/jellystat
+  tag: latest
+
+db:
+  image: postgres:18
+  storage: 2Gi
+
+backupStorage: 1Gi
+
+timezone: "Europe/London"
+dbExistingClaim: jellystat-db-nfs
+backupExistingClaim: jellystat-backup-nfs
+
+# -- Secrets: override via --set or values-secret.yaml
+secrets:
+  postgresUser: postgres
+  postgresPassword: "CHANGE_ME"
+  jwtSecret: "CHANGE_ME"
+
+ingress:
+  enabled: true
+  host: jellystat.homelab.local
+  homepage:
+    name: Jellystat
+    description: Jellyfin Statistics
+    icon: jellystat
+    group: Media
+
+resources:
+  app:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+  db:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi

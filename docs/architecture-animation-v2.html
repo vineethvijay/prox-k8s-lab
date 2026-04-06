@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1920, height=1080">
+<title>Proxmox K8s Homelab – Architecture</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1920px; height: 1080px;
+    background: #0b0f2a;
+    font-family: 'Inter', sans-serif;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* ── Subtle grid ── */
+  .grid {
+    position: absolute; inset: 0; z-index: 0;
+    background-image:
+      linear-gradient(rgba(100,80,200,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(100,80,200,0.04) 1px, transparent 1px);
+    background-size: 60px 60px;
+  }
+
+  /* ── Particles ── */
+  .particles { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
+  .particle {
+    position: absolute; width: 2px; height: 2px;
+    background: rgba(110,64,201,0.35); border-radius: 50%;
+    animation: pfloat 22s infinite linear;
+  }
+  @keyframes pfloat {
+    0%   { transform: translateY(1100px) scale(0); opacity: 0; }
+    8%   { opacity: 1; }
+    92%  { opacity: 1; }
+    100% { transform: translateY(-20px) scale(1.4); opacity: 0; }
+  }
+
+  /* ── Title ── */
+  .title-bar {
+    position: absolute; top: 24px; left: 0; right: 0;
+    text-align: center; z-index: 20;
+  }
+  .title-bar h1 {
+    font-size: 36px; font-weight: 800; color: #fff;
+    letter-spacing: -0.5px;
+    opacity: 0; animation: fadeDown 0.8s 0.3s forwards;
+  }
+  .title-bar h1 span { color: #a78bfa; }
+  .title-bar .sub {
+    font-size: 14px; color: rgba(255,255,255,0.4); margin-top: 4px;
+    opacity: 0; animation: fadeDown 0.8s 0.6s forwards;
+  }
+  @keyframes fadeDown {
+    from { opacity: 0; transform: translateY(-12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── SVG layer (arrows + flow) ── */
+  .svg-layer {
+    position: absolute; inset: 0; z-index: 5;
+    pointer-events: none;
+  }
+  .svg-layer svg { width: 1920px; height: 1080px; }
+
+  /* ── Content layer ── */
+  .canvas {
+    position: absolute; top: 100px; left: 0; right: 0; bottom: 0;
+    z-index: 10;
+  }
+
+  /* ── Stage columns ── */
+  .stage {
+    position: absolute;
+    display: flex; flex-direction: column; align-items: center;
+    opacity: 0;
+  }
+  .stage.s1 { left: 40px;   top: 80px;  animation: stageIn 0.7s 1.0s forwards; }
+  .stage.s2 { left: 250px;  top: 50px;  animation: stageIn 0.7s 1.4s forwards; }
+  .stage.s3 { left: 510px;  top: 10px;  animation: stageIn 0.7s 1.8s forwards; }
+  .stage.s4 { left: 920px;  top: 10px;  animation: stageIn 0.7s 2.2s forwards; }
+  .stage.s5 { left: 1310px; top: 10px;  animation: stageIn 0.7s 2.6s forwards; }
+
+  @keyframes stageIn {
+    from { opacity: 0; transform: translateY(25px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── Stage label ── */
+  .stage-label {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 2.5px; color: rgba(255,255,255,0.3);
+    margin-bottom: 14px;
+  }
+
+  /* ── Card ── */
+  .node {
+    position: relative;
+    width: 175px;
+    background: rgba(255,255,255,0.035);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 14px;
+    padding: 18px 14px;
+    margin-bottom: 12px;
+    text-align: center;
+    backdrop-filter: blur(8px);
+    transition: all 0.3s;
+  }
+  .node:hover {
+    border-color: rgba(255,255,255,0.18);
+    background: rgba(255,255,255,0.06);
+    transform: translateY(-2px);
+    box-shadow: 0 10px 35px rgba(0,0,0,0.3);
+  }
+  .node .icon {
+    width: 44px; height: 44px; border-radius: 11px;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 8px; font-size: 20px; color: #fff;
+  }
+  .node .label { font-size: 12.5px; font-weight: 700; color: #fff; margin-bottom: 2px; }
+  .node .sub   { font-size: 9.5px; color: rgba(255,255,255,0.38); line-height: 1.4; }
+
+  /* ── Colors ── */
+  .c-git .icon    { background: linear-gradient(135deg, #6e40c9, #9b6dff); }
+  .c-ansible .icon { background: linear-gradient(135deg, #ee0000, #ff4444); }
+  .c-proxmox .icon { background: linear-gradient(135deg, #e57000, #ff9933); }
+  .c-k8s .icon     { background: linear-gradient(135deg, #326ce5, #5b8def); }
+  .c-argo .icon    { background: linear-gradient(135deg, #ef7b4d, #ff9a76); }
+  .c-media .icon   { background: linear-gradient(135deg, #e040fb, #f278ff); }
+  .c-dl .icon      { background: linear-gradient(135deg, #00bcd4, #4dd0e1); }
+  .c-infra .icon   { background: linear-gradient(135deg, #607d8b, #90a4ae); }
+  .c-storage .icon { background: linear-gradient(135deg, #8bc34a, #aed581); }
+  .c-net .icon     { background: linear-gradient(135deg, #f5a623, #ffcc02); }
+  .c-dns .icon     { background: linear-gradient(135deg, #4caf50, #66bb6a); }
+  .c-gpu .icon     { background: linear-gradient(135deg, #76b900, #8fd619); }
+
+  /* ── Pulse ── */
+  .pulse {
+    position: absolute; top: -5px; right: -5px;
+    width: 12px; height: 12px; border-radius: 50%;
+    background: #4caf50;
+  }
+  .pulse::after {
+    content: ''; position: absolute; inset: -4px;
+    border-radius: 50%; border: 2px solid #4caf50;
+    animation: pring 2s infinite;
+  }
+  @keyframes pring {
+    0% { transform: scale(1); opacity: 0.6; }
+    100% { transform: scale(2.2); opacity: 0; }
+  }
+
+  /* ── Proxmox host boxes ── */
+  .pve-box {
+    border: 1px solid rgba(229,112,0,0.18);
+    border-radius: 16px; padding: 12px 10px 10px;
+    margin-bottom: 10px;
+    background: rgba(229,112,0,0.025);
+    width: 380px;
+  }
+  .pve-box .pve-title {
+    font-size: 9.5px; font-weight: 700; color: #e57000;
+    text-transform: uppercase; letter-spacing: 1.5px;
+    margin-bottom: 8px; text-align: center;
+  }
+  .pve-nodes { display: flex; gap: 7px; justify-content: center; flex-wrap: wrap; }
+  .pve-nodes .node { width: 115px; padding: 12px 6px; margin: 0; }
+  .pve-nodes .node .icon { width: 34px; height: 34px; font-size: 15px; border-radius: 9px; }
+  .pve-nodes .node .label { font-size: 10.5px; }
+  .pve-nodes .node .sub { font-size: 8.5px; }
+
+  /* ── K8s small row ── */
+  .k8s-row { display: flex; gap: 7px; flex-wrap: wrap; justify-content: center; width: 370px; }
+  .k8s-row .node { width: 115px; padding: 12px 6px; margin: 0; }
+  .k8s-row .node .icon { width: 32px; height: 32px; font-size: 14px; border-radius: 9px; }
+  .k8s-row .node .label { font-size: 10px; }
+  .k8s-row .node .sub { font-size: 8px; }
+
+  /* ── APPS CONTAINER ── */
+  .apps-container {
+    position: relative;
+    border: 1px solid rgba(167,139,250,0.15);
+    border-radius: 20px;
+    padding: 18px 16px 14px;
+    background: rgba(167,139,250,0.02);
+    width: 410px;
+  }
+  .apps-container::before {
+    content: ''; position: absolute; inset: -1px;
+    border-radius: 20px;
+    background: linear-gradient(135deg, rgba(167,139,250,0.12), rgba(224,64,251,0.08), rgba(0,188,212,0.08));
+    z-index: -1;
+    animation: containerGlow 4s ease-in-out infinite alternate;
+  }
+  @keyframes containerGlow {
+    0%   { opacity: 0.3; }
+    100% { opacity: 0.8; }
+  }
+  .apps-container .apps-title {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 2px; color: rgba(167,139,250,0.7);
+    text-align: center; margin-bottom: 14px;
+  }
+  .app-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .app-group {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 12px; padding: 12px;
+  }
+  .app-group .group-title {
+    font-size: 9.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 1.5px; margin-bottom: 7px;
+  }
+  .app-group.media .group-title { color: #e040fb; }
+  .app-group.downloads .group-title { color: #00bcd4; }
+  .app-group.monitoring .group-title { color: #f5a623; }
+  .app-group.platform .group-title { color: #8899a6; }
+  .app-item { display: flex; align-items: center; gap: 5px; padding: 2.5px 0; }
+  .app-item .dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+  .app-group.media .dot { background: #e040fb; }
+  .app-group.downloads .dot { background: #00bcd4; }
+  .app-group.monitoring .dot { background: #f5a623; }
+  .app-group.platform .dot { background: #90a4ae; }
+  .app-item span { font-size: 10px; color: rgba(255,255,255,0.55); font-weight: 500; }
+
+  /* ── Bottom stats ── */
+  .stats-bar {
+    position: absolute; bottom: 18px; left: 60px; right: 60px;
+    display: flex; justify-content: center; gap: 55px;
+    z-index: 20;
+    opacity: 0; animation: fadeDown 0.8s 4s forwards;
+  }
+  .stat { text-align: center; }
+  .stat .num { font-size: 30px; font-weight: 800; color: #a78bfa; line-height: 1; }
+  .stat .desc {
+    font-size: 10px; color: rgba(255,255,255,0.3);
+    font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px;
+  }
+
+  /* ── Storage row ── */
+  .storage-row { display: flex; gap: 7px; justify-content: center; }
+  .storage-row .node { width: 115px; padding: 12px 6px; margin: 0; }
+  .storage-row .node .icon { width: 32px; height: 32px; font-size: 14px; border-radius: 9px; }
+  .storage-row .node .label { font-size: 10px; }
+  .storage-row .node .sub { font-size: 8px; }
+</style>
+</head>
+<body>
+
+<div class="grid"></div>
+<div class="particles" id="particles"></div>
+
+<!-- Title -->
+<div class="title-bar">
+  <h1><i class="fa-solid fa-server" style="margin-right:8px; font-size:30px;"></i>Proxmox <span>Kubernetes</span> Homelab</h1>
+  <div class="sub">Proxmox Hosts · HA K8s Cluster · ArgoCD-Managed Apps · GPU Transcoding</div>
+</div>
+
+<!-- ═══ SVG FLOW LAYER ═══ -->
+<div class="svg-layer">
+<svg viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <filter id="glow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  <filter id="glow2"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+
+  <radialGradient id="dotGrad1"> <stop offset="0%" stop-color="#a78bfa"/> <stop offset="100%" stop-color="#6e40c9"/> </radialGradient>
+  <radialGradient id="dotGrad2"> <stop offset="0%" stop-color="#ff9a76"/> <stop offset="100%" stop-color="#ef7b4d"/> </radialGradient>
+  <radialGradient id="dotGrad3"> <stop offset="0%" stop-color="#66bb6a"/> <stop offset="100%" stop-color="#4caf50"/> </radialGradient>
+</defs>
+
+<!-- ── Static connector lines ── -->
+<!-- Source → Provision -->
+<path d="M 270,380 C 310,380 290,350 340,350" fill="none" stroke="rgba(167,139,250,0.08)" stroke-width="2"/>
+<!-- Provision → Infrastructure -->
+<path d="M 490,350 C 540,350 550,330 590,330" fill="none" stroke="rgba(167,139,250,0.08)" stroke-width="2"/>
+<!-- Infrastructure → K8s -->
+<path d="M 950,380 C 1000,380 980,320 1010,320" fill="none" stroke="rgba(167,139,250,0.08)" stroke-width="2"/>
+
+<!-- K8s → Apps (main thick connector) -->
+<path id="k8sToApps" d="M 1350,380 C 1390,380 1380,400 1400,400" fill="none" stroke="rgba(167,139,250,0.08)" stroke-width="2"/>
+
+<!-- ── ANIMATED FLOW: Source → Provision ── -->
+<path id="f1" d="M 180,340 C 260,340 260,310 350,310" fill="none" stroke="none"/>
+<g>
+  <circle r="5" fill="url(#dotGrad1)" filter="url(#glow)" opacity="0">
+    <animateMotion dur="2.2s" repeatCount="indefinite"><mpath href="#f1"/></animateMotion>
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.05;0.15;0.85;1" dur="2.2s" repeatCount="indefinite"/>
+  </circle>
+  <!-- Trail -->
+  <circle r="3" fill="#a78bfa" opacity="0">
+    <animateMotion dur="2.2s" begin="0.12s" repeatCount="indefinite"><mpath href="#f1"/></animateMotion>
+    <animate attributeName="opacity" values="0;0;0.4;0.4;0" keyTimes="0;0.05;0.15;0.85;1" dur="2.2s" begin="0.12s" repeatCount="indefinite"/>
+  </circle>
+  <circle r="2" fill="#a78bfa" opacity="0">
+    <animateMotion dur="2.2s" begin="0.22s" repeatCount="indefinite"><mpath href="#f1"/></animateMotion>
+    <animate attributeName="opacity" values="0;0;0.2;0.2;0" keyTimes="0;0.05;0.15;0.85;1" dur="2.2s" begin="0.22s" repeatCount="indefinite"/>
+  </circle>
+</g>
+<!-- Second wave offset -->
+<g>
+  <circle r="5" fill="url(#dotGrad1)" filter="url(#glow)" opacity="0">
+    <animateMotion dur="2.2s" begin="1.1s" repeatCount="indefinite"><mpath href="#f1"/></animateMotion>
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.05;0.15;0.85;1" dur="2.2s" begin="1.1s" repeatCount="indefinite"/>
+  </circle>
+  <circle r="3" fill="#a78bfa" opacity="0">
+    <animateMotion dur="2.2s" begin="1.22s" repeatCount="indefinite"><mpath href="#f1"/></animateMotion>
+    <animate attributeName="opacity" values="0;0;0.35;0.35;0" keyTimes="0;0.05;0.15;0.85;1" dur="2.2s" begin="1.22s" repeatCount="indefinite"/>
+  </circle>
+</g>
+
+<!-- ── ANIMATED FLOW: Provision → Infra ── -->
+<path id="f2" d="M 500,340 C 540,330 560,300 610,300" fill="none" stroke="none"/>
+<g>
+  <circle r="5" fill="url(#dotGrad1)" filter="url(#glow)" opacity="0">
+    <animateMotion dur="2s" begin="0.6s" repeatCount="indefinite"><mpath href="#f2"/></animateMotion>
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.05;0.15;0.85;1" dur="2s" begin="0.6s" repeatCount="indefinite"/>
+  </circle>
+  <circle r="3" fill="#a78bfa" opacity="0">
+    <animateMotion dur="2s" begin="0.72s" repeatCount="indefinite"><mpath href="#f2"/></animateMotion>
+    <animate attributeName="opacity" values="0;0;0.35;0.35;0" keyTimes="0;0.05;0.15;0.85;1" dur="2s" begin="0.72s" repeatCount="indefinite"/>
+  </circle>
+</g>
+<g>
+  <circle r="5" fill="url(#dotGrad1)" filter="url(#glow)" opacity="0">
+    <animateMotion dur="2s" begin="1.6s" repeatCount="indefinite"><mpath href="#f2"/></animateMotion>
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.05;0.15;0.85;1" dur="2s" begin="1.6s" repeatCount="indefinite"/>
+  </circle>
+</g>
+
+<!-- ── ANIMATED FLOW: Infra → K8s ── -->
+<path id="f3" d="M 950,360 C 990,350 1000,310 1020,300" fill="none" stroke="none"/>
+<g>
+  <circle r="5" fill="url(#dotGrad1)" filter="url(#glow)" opacity="0">
+    <animateMotion dur="1.8s" begin="1.0s" repeatCount="indefinite"><mpath href="#f3"/></animateMotion>
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.05;0.15;0.85;1" dur="1.8s" begin="1.0s" repeatCount="indefinite"/>
+  </circle>
+  <circle r="3" fill="#a78bfa" opacity="0">
+    <animateMotion dur="1.8s" begin="1.12s" repeatCount="indefinite"><mpath href="#f3"/></animateMotion>
+    <animate attributeName="opacity" values="0;0;0.35;0.35;0" keyTimes="0;0.05;0.15;0.85;1" dur="1.8s" begin="1.12s" repeatCount="indefinite"/>
+  </circle>
+</g>
+<g>
+  <circle r="5" fill="url(#dotGrad1)" filter="url(#glow)" opacity="0">
+    <animateMotion dur="1.8s" begin="1.9s" repeatCount="indefinite"><mpath href="#f3"/></animateMotion>
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.05;0.15;0.85;1" dur="1.8s" begin="1.9s" repeatCount="indefinite"/>
+  </circle>
+</g>
+
+<!-- ── ANIMATED FLOW: K8s → Apps (multiple streams fanning into the container) ── -->
+<!-- Top stream -->
+<path id="f4a" d="M 1340,280 C 1380,270 1390,240 1420,230" fill="none" stroke="none"/>
+<!-- Middle stream -->
+<path id="f4b" d="M 1340,360 C 1370,360 1390,360 1420,360" fill="none" stroke="none"/>
+<!-- Bottom stream -->
+<path id="f4c" d="M 1340,440 C 1380,450 1390,480 1420,490" fill="none" stroke="none"/>
+
+<!-- Static fan lines -->
+<path d="M 1340,280 C 1380,270 1390,240 1420,230" fill="none" stroke="rgba(167,139,250,0.06)" stroke-width="2"/>
+<path d="M 1340,360 C 1370,360 1390,360 1420,360" fill="none" stroke="rgba(167,139,250,0.08)" stroke-width="2.5"/>
+<path d="M 1340,440 C 1380,450 1390,480 1420,490" fill="none" stroke="rgba(167,139,250,0.06)" stroke-width="2"/>
+
+<!-- Top dots -->
+<g>
+  <circle r="4" fill="#e040fb" filter="url(#glow)" opacity="0">
+    <animateMotion dur="1.5s" begin="1.5s" repeatCount="indefinite"><mpath href="#f4a"/></animateMotion>
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.05;0.15;0.85;1" dur="1.5s" begin="1.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle r="4" fill="#e040fb" filter="url(#glow)" opacity="0">
+    <animateMotion dur="1.5s" begin="2.25s" repeatCount="indefinite"><mpath href="#f4a"/></animateMotion>
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.05;0.15;0.85;1" dur="1.5s" begin="2.25s" repeatCount="indefinite"/>
+  </circle>
+</g>
+<!-- Middle dots (main flow) -->
+<g>
+  <circle r="5" fill="url(#dotGrad1)" filter="url(#glow)" opacity="0">
+    <animateMotion dur="1.4s" begin="1.5s" repeatCount="indefinite"><mpath href="#f4b"/></animateMotion>
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.05;0.15;0.85;1" dur="1.4s" begin="1.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle r="3" fill="#a78bfa" opacity="0">
+    <animateMotion dur="1.4s" begin="1.62s" repeatCount="indefinite"><mpath href="#f4b"/></animateMotion>
+    <animate attributeName="opacity" values="0;0;0.4;0.4;0" keyTimes="0;0.05;0.15;0.85;1" dur="1.4s" begin="1.62s" repeatCount="indefinite"/>
+  </circle>
+  <circle r="5" fill="url(#dotGrad1)" filter="url(#glow)" opacity="0">
+    <animateMotion dur="1.4s" begin="2.2s" repeatCount="indefinite"><mpath href="#f4b"/></animateMotion>
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.05;0.15;0.85;1" dur="1.4s" begin="2.2s" repeatCount="indefinite"/>
+  </circle>
+</g>
+<!-- Bottom dots -->
+<g>
+  <circle r="4" fill="#00bcd4" filter="url(#glow)" opacity="0">
+    <animateMotion dur="1.5s" begin="1.8s" repeatCount="indefinite"><mpath href="#f4c"/></animateMotion>
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.05;0.15;0.85;1" dur="1.5s" begin="1.8s" repeatCount="indefinite"/>
+  </circle>
+  <circle r="4" fill="#00bcd4" filter="url(#glow)" opacity="0">
+    <animateMotion dur="1.5s" begin="2.55s" repeatCount="indefinite"><mpath href="#f4c"/></animateMotion>
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.05;0.15;0.85;1" dur="1.5s" begin="2.55s" repeatCount="indefinite"/>
+  </circle>
+</g>
+
+<!-- ── GitOps feedback arc ── -->
+<path id="gitops" d="M 180,250 C 180,130 700,95 1250,300" fill="none" stroke="rgba(239,123,77,0.07)" stroke-width="1.5" stroke-dasharray="6,6"/>
+<g>
+  <circle r="4" fill="url(#dotGrad2)" filter="url(#glow)" opacity="0">
+    <animateMotion dur="5s" begin="2.5s" repeatCount="indefinite"><mpath href="#gitops"/></animateMotion>
+    <animate attributeName="opacity" values="0;0;0.9;0.9;0" keyTimes="0;0.03;0.1;0.9;1" dur="5s" begin="2.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle r="2.5" fill="#ef7b4d" opacity="0">
+    <animateMotion dur="5s" begin="2.65s" repeatCount="indefinite"><mpath href="#gitops"/></animateMotion>
+    <animate attributeName="opacity" values="0;0;0.4;0.4;0" keyTimes="0;0.03;0.1;0.9;1" dur="5s" begin="2.65s" repeatCount="indefinite"/>
+  </circle>
+  <!-- Second wave -->
+  <circle r="4" fill="url(#dotGrad2)" filter="url(#glow)" opacity="0">
+    <animateMotion dur="5s" begin="5s" repeatCount="indefinite"><mpath href="#gitops"/></animateMotion>
+    <animate attributeName="opacity" values="0;0;0.9;0.9;0" keyTimes="0;0.03;0.1;0.9;1" dur="5s" begin="5s" repeatCount="indefinite"/>
+  </circle>
+</g>
+<text x="540" y="100" fill="rgba(239,123,77,0.28)" font-size="11" font-family="Inter" font-weight="900" text-anchor="middle" letter-spacing="3">GITOPS AUTO-SYNC</text>
+
+<!-- ── Storage data flow (up from bottom) ── -->
+<path id="storageFlow" d="M 720,780 C 720,700 750,650 780,600" fill="none" stroke="rgba(139,195,74,0.06)" stroke-width="1.5" stroke-dasharray="4,6"/>
+<g>
+  <circle r="3.5" fill="url(#dotGrad3)" filter="url(#glow)" opacity="0">
+    <animateMotion dur="3s" begin="2s" repeatCount="indefinite"><mpath href="#storageFlow"/></animateMotion>
+    <animate attributeName="opacity" values="0;0;0.8;0.8;0" keyTimes="0;0.05;0.15;0.85;1" dur="3s" begin="2s" repeatCount="indefinite"/>
+  </circle>
+  <circle r="3.5" fill="url(#dotGrad3)" filter="url(#glow)" opacity="0">
+    <animateMotion dur="3s" begin="3.5s" repeatCount="indefinite"><mpath href="#storageFlow"/></animateMotion>
+    <animate attributeName="opacity" values="0;0;0.8;0.8;0" keyTimes="0;0.05;0.15;0.85;1" dur="3s" begin="3.5s" repeatCount="indefinite"/>
+  </circle>
+</g>
+
+</svg>
+</div>
+
+<!-- ═══ CONTENT LAYER ═══ -->
+<div class="canvas">
+
+  <!-- STAGE 1: Source -->
+  <div class="stage s1 c-git">
+    <div class="stage-label">Source</div>
+    <div class="node">
+      <div class="pulse"></div>
+      <div class="icon"><i class="fa-brands fa-github"></i></div>
+      <div class="label">GitHub</div>
+      <div class="sub">Single source of truth<br>Push to main → deploy</div>
+    </div>
+    <div class="node" style="width:175px;">
+      <div class="icon" style="background: linear-gradient(135deg,#333,#555);"><i class="fa-solid fa-folder-tree"></i></div>
+      <div class="label">Repository</div>
+      <div class="sub" style="text-align:left; padding-left:10px; font-family:monospace; font-size:8.5px; line-height:1.6;">
+        ansible/ · argocd/<br>helm/charts/ · scripts/<br>docs/
+      </div>
+    </div>
+  </div>
+
+  <!-- STAGE 2: Provision -->
+  <div class="stage s2 c-ansible">
+    <div class="stage-label">Provision</div>
+    <div class="node">
+      <div class="icon"><i class="fa-solid fa-gears"></i></div>
+      <div class="label">Ansible</div>
+      <div class="sub">13-phase pipeline<br>Infrastructure as Code</div>
+    </div>
+    <div class="node c-proxmox">
+      <div class="icon"><i class="fa-solid fa-cube"></i></div>
+      <div class="label">cloud-init</div>
+      <div class="sub">VM templates<br>Ubuntu 24.04</div>
+    </div>
+    <div class="node c-k8s">
+      <div class="icon"><i class="fa-solid fa-terminal"></i></div>
+      <div class="label">kubeadm</div>
+      <div class="sub">Cluster bootstrap<br>+ HA conversion</div>
+    </div>
+  </div>
+
+  <!-- STAGE 3: Infrastructure -->
+  <div class="stage s3">
+    <div class="stage-label">Infrastructure</div>
+    <div class="pve-box">
+      <div class="pve-title"><i class="fa-solid fa-server"></i> &nbsp;pve-local · Intel i7 · 16GB</div>
+      <div class="pve-nodes">
+        <div class="node c-k8s"><div class="icon"><i class="fa-solid fa-crown"></i></div><div class="label">k8s-cp</div><div class="sub">Control Plane<br>2c / 3GB</div></div>
+        <div class="node c-k8s"><div class="icon"><i class="fa-solid fa-microchip"></i></div><div class="label">k8s-w1</div><div class="sub">Worker<br>3c / 4GB</div></div>
+        <div class="node c-gpu"><div class="icon"><i class="fa-solid fa-bolt"></i></div><div class="label">k8s-w2</div><div class="sub">Worker+GPU<br>4c / 6GB</div></div>
+      </div>
+    </div>
+    <div class="pve-box">
+      <div class="pve-title"><i class="fa-solid fa-server"></i> &nbsp;pve-remote · Ryzen 5 · 16GB</div>
+      <div class="pve-nodes">
+        <div class="node c-k8s"><div class="icon"><i class="fa-solid fa-crown"></i></div><div class="label">k8s-cp2</div><div class="sub">Control Plane<br>2c / 3GB</div></div>
+        <div class="node c-k8s"><div class="icon"><i class="fa-solid fa-crown"></i></div><div class="label">k8s-cp3</div><div class="sub">Control Plane<br>2c / 3GB</div></div>
+        <div class="node c-k8s"><div class="icon"><i class="fa-solid fa-microchip"></i></div><div class="label">k8s-w4</div><div class="sub">Worker<br>4c / 6GB</div></div>
+      </div>
+    </div>
+    <div class="storage-row">
+      <div class="node c-storage"><div class="icon"><i class="fa-solid fa-hard-drive"></i></div><div class="label">NAS</div><div class="sub">Synology 16TB<br>NFS RAID</div></div>
+      <div class="node c-storage"><div class="icon"><i class="fa-solid fa-database"></i></div><div class="label">Local HDD</div><div class="sub">NFS Provisioner<br>K8s PVCs</div></div>
+    </div>
+  </div>
+
+  <!-- STAGE 4: K8s Cluster -->
+  <div class="stage s4">
+    <div class="stage-label">K8s Cluster</div>
+    <div class="k8s-row">
+      <div class="node c-net"><div class="pulse" style="background:#f5a623;"></div><div class="icon"><i class="fa-solid fa-shield-halved"></i></div><div class="label">kube-vip</div><div class="sub">HA VIP .199</div></div>
+      <div class="node c-net"><div class="icon"><i class="fa-solid fa-network-wired"></i></div><div class="label">Calico</div><div class="sub">CNI · Pod Net</div></div>
+      <div class="node c-net"><div class="icon"><i class="fa-solid fa-scale-balanced"></i></div><div class="label">MetalLB</div><div class="sub">L2 .240–.250</div></div>
+    </div>
+    <div style="height:8px;"></div>
+    <div class="k8s-row">
+      <div class="node c-net"><div class="icon"><i class="fa-solid fa-arrow-right-to-bracket"></i></div><div class="label">NGINX</div><div class="sub">Ingress<br>*.homelab.local</div></div>
+      <div class="node c-dns"><div class="icon"><i class="fa-solid fa-globe"></i></div><div class="label">Pi-hole</div><div class="sub">DNS · .242</div></div>
+      <div class="node c-argo"><div class="pulse" style="background:#ef7b4d;"></div><div class="icon"><i class="fa-solid fa-rotate"></i></div><div class="label">ArgoCD</div><div class="sub">GitOps<br>App-of-Apps</div></div>
+    </div>
+    <div style="height:8px;"></div>
+    <div style="display:flex; gap:7px; justify-content:center;">
+      <div class="node c-gpu" style="width:170px; padding:10px 6px; margin:0;"><div class="icon" style="width:32px; height:32px; font-size:14px; border-radius:9px;"><i class="fa-solid fa-bolt"></i></div><div class="label" style="font-size:10px;">GPU Passthrough</div><div class="sub" style="font-size:8px;">iGPU + GTX 1650<br>HW Transcoding</div></div>
+      <div class="node c-storage" style="width:170px; padding:10px 6px; margin:0;"><div class="icon" style="width:32px; height:32px; font-size:14px; border-radius:9px;"><i class="fa-solid fa-folder-open"></i></div><div class="label" style="font-size:10px;">NFS Storage</div><div class="sub" style="font-size:8px;">nfs-hdd · nfs-nas<br>All workers</div></div>
+    </div>
+    <div style="height:8px;"></div>
+    <div class="k8s-row">
+      <div class="node c-storage"><div class="icon"><i class="fa-solid fa-layer-group"></i></div><div class="label">Longhorn</div><div class="sub">Replicated<br>Block Storage</div></div>
+      <div class="node c-infra"><div class="icon"><i class="fa-solid fa-fire"></i></div><div class="label">Prometheus</div><div class="sub">Metrics<br>Collection</div></div>
+      <div class="node c-infra"><div class="icon"><i class="fa-solid fa-chart-area"></i></div><div class="label">Grafana</div><div class="sub">Dashboards<br>Visualization</div></div>
+    </div>
+  </div>
+
+  <!-- STAGE 5: Applications -->
+  <div class="stage s5">
+    <div class="stage-label">Workloads</div>
+    <div class="apps-container">
+      <div class="apps-title"><i class="fa-solid fa-cubes" style="margin-right:4px;"></i> ArgoCD-Managed Applications</div>
+      <div class="app-grid">
+        <div class="app-group media">
+          <div class="group-title"><i class="fa-solid fa-film"></i> Media & Streaming</div>
+          <div class="app-item"><div class="dot"></div><span>Plex (GPU Transcode)</span></div>
+          <div class="app-item"><div class="dot"></div><span>Jellyfin (GPU Transcode)</span></div>
+          <div class="app-item"><div class="dot"></div><span>Sonarr · Radarr</span></div>
+          <div class="app-item"><div class="dot"></div><span>Lidarr · Readarr</span></div>
+          <div class="app-item"><div class="dot"></div><span>Bazarr · Prowlarr</span></div>
+          <div class="app-item"><div class="dot"></div><span>Seerr · Pinchflat</span></div>
+          <div class="app-item"><div class="dot"></div><span>Tautulli · Jellystat</span></div>
+          <div class="app-item"><div class="dot"></div><span>Random Video Streamer (my custom app)</span></div>
+        </div>
+        <div class="app-group downloads">
+          <div class="group-title"><i class="fa-solid fa-download"></i> Downloads</div>
+          <div class="app-item"><div class="dot"></div><span>SABnzbd</span></div>
+          <div class="app-item"><div class="dot"></div><span>Downloader + Gluetun VPN</span></div>
+          <div class="app-item"><div class="dot"></div><span>FlareSolverr</span></div>
+        </div>
+        <div class="app-group monitoring">
+          <div class="group-title"><i class="fa-solid fa-chart-line"></i> Monitoring</div>
+          <div class="app-item"><div class="dot"></div><span>Homepage</span></div>
+          <div class="app-item"><div class="dot"></div><span>Headlamp</span></div>
+          <div class="app-item"><div class="dot"></div><span>Gatus</span></div>
+          <div class="app-item"><div class="dot"></div><span>Glances</span></div>
+        </div>
+        <div class="app-group platform">
+          <div class="group-title"><i class="fa-solid fa-cubes"></i> Platform</div>
+          <div class="app-item"><div class="dot"></div><span>Pi-hole · Vaultwarden</span></div>
+          <div class="app-item"><div class="dot"></div><span>Kopia Backup / UI</span></div>
+          <div class="app-item"><div class="dot"></div><span>Filebrowser</span></div>
+          <div class="app-item"><div class="dot"></div><span>Docker Registry</span></div>
+          <div class="app-item"><div class="dot"></div><span>NFS Provisioners</span></div>
+          <div class="app-item"><div class="dot"></div><span>MetalLB Config</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Stats Bar -->
+<div class="stats-bar">
+  <div class="stat"><div class="num" data-target="6">0</div><div class="desc">K8s Nodes</div></div>
+  <div class="stat"><div class="num" data-target="3">0</div><div class="desc">Control Planes</div></div>
+  <div class="stat"><div class="num" data-target="29">0</div><div class="desc">Applications</div></div>
+  <div class="stat"><div class="num" data-target="13">0</div><div class="desc">Ansible Phases</div></div>
+  <div class="stat"><div class="num" data-target="2">0</div><div class="desc">GPUs</div></div>
+  <div class="stat"><div class="num" data-target="32">0</div><div class="desc">GB RAM</div></div>
+</div>
+
+<script>
+  // Particles
+  const pc = document.getElementById('particles');
+  for (let i = 0; i < 50; i++) {
+    const p = document.createElement('div');
+    p.className = 'particle';
+    p.style.left = Math.random() * 100 + '%';
+    p.style.animationDelay = Math.random() * 22 + 's';
+    p.style.animationDuration = (16 + Math.random() * 14) + 's';
+    p.style.width = p.style.height = (1 + Math.random() * 2) + 'px';
+    pc.appendChild(p);
+  }
+  // Counters
+  setTimeout(() => {
+    document.querySelectorAll('.stat .num').forEach(el => {
+      const target = +el.dataset.target, dur = 2000, start = performance.now();
+      (function tick(now) {
+        const p = Math.min((now - start) / dur, 1);
+        el.textContent = Math.round((1 - Math.pow(1 - p, 3)) * target);
+        if (p < 1) requestAnimationFrame(tick);
+      })(start);
+    });
+  }, 4200);
+</script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+# Secrets
+values-secret.yaml
+.env
+*.pem
+*.key
+
+# Python / Ansible venv
+ansible/.venv/
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+
+# Helm
+*.tgz
+
+# Archived raw manifests (replaced by helm/charts/)
+manifests-archive/
+
+# Archived scripts (replaced by ansible/)
+scripts-archive/

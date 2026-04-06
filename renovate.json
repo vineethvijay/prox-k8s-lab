@@ -1,0 +1,60 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "enabledManagers": ["custom.regex"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Update image tags in Helm values.yaml (image.repository + image.tag pattern)",
+      "fileMatch": ["^helm/charts/.+/values\\.yaml$"],
+      "matchStrings": [
+        "repository:\\s*(?<depName>[^\\s]+)\\n\\s*tag:\\s*(?<currentValue>[^\\s]+)"
+      ],
+      "datasourceTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "Update inline image:tag references (vpn-downloader style)",
+      "fileMatch": ["^helm/charts/.+/values\\.yaml$"],
+      "matchStrings": [
+        "image:\\s*(?<depName>[^:]+):(?<currentValue>[^\\s]+)"
+      ],
+      "datasourceTemplate": "docker"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Group all linuxserver.io image updates",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["/^linuxserver\\//", "/^lscr.io\\/linuxserver\\//"],
+      "groupName": "linuxserver images"
+    },
+    {
+      "description": "Group all arr stack updates",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": [
+        "linuxserver/sonarr",
+        "linuxserver/radarr",
+        "linuxserver/lidarr",
+        "linuxserver/readarr",
+        "linuxserver/bazarr",
+        "linuxserver/prowlarr"
+      ],
+      "groupName": "arr stack images"
+    },
+    {
+      "description": "Pin latest tags to actual digest for tracking",
+      "matchDatasources": ["docker"],
+      "matchCurrentValue": "latest",
+      "pinDigests": false
+    },
+    {
+      "description": "Auto-merge patch updates for media apps",
+      "matchDatasources": ["docker"],
+      "matchUpdateTypes": ["digest", "patch", "minor"],
+      "automerge": true,
+      "automergeType": "pr"
+    }
+  ],
+  "schedule": ["every day"]
+}

@@ -1,0 +1,82 @@
+---
+# ── Network ──
+gateway: "192.168.1.1"
+dns_servers:
+  - "192.168.1.242"
+  - "8.8.8.8"
+dns_server: "192.168.1.242"
+search_domain: "k8s.local"
+
+# ── Proxmox VM defaults ──
+vm_template_id: 9000
+vm_storage: "local-lvm"
+vm_bridge: "vmbr0"
+vm_ci_user: "user"
+vm_disk_size: "20G"
+
+# ── Kubernetes ──
+k8s_version: "1.32"
+pod_cidr: "10.244.0.0/16"
+kubeconfig_context: "proxmox-k8s"
+
+# ── CNI / Calico ──
+calico_version: "v3.29.3"
+
+# ── kube-vip (HA) ──
+kube_vip_version: "v0.8.3"
+kube_vip_interface: "eth0"
+kube_vip_address: "192.168.1.199"
+
+# ── MetalLB ──
+metallb_config_manifest: "{{ playbook_dir }}/../../manifests/storage/metallb-config.yaml"
+
+# ── Local Docker Registry ──
+local_registry: "192.168.1.245:5000"
+
+# ── Monitoring ──
+monitoring_values_file: "{{ playbook_dir }}/../../helm/monitoring-values.yaml"
+
+# ── NFS Mounts ──
+nfs_mounts:
+  - local_path: /mnt/nfs/hdd-int
+    remote_path: "192.168.1.11:/data/hdd-internal"
+    nfs_version: "nfsvers=4.2"
+  - local_path: /mnt/nfs/nas-media
+    remote_path: "192.168.1.28:/data/nas-media"
+    nfs_version: "nfsvers=4"
+  - local_path: /mnt/nfs/nas-backups
+    remote_path: "192.168.1.28:/data/nas-backups/kopia"
+    nfs_version: "nfsvers=3"
+
+# ── Ingress DNS (for local /etc/hosts) ──
+ingress_ip: "192.168.1.240"
+plex_ip: "192.168.1.241"
+pihole_ip: "192.168.1.242"
+adguard_ip: "192.168.1.243"
+ingress_domains:
+  - grafana.homelab.local
+  - longhorn.k8s.local
+  - homepage.homelab.local
+  - seerr.homelab.local
+  - tautulli.homelab.local
+  - bazarr.homelab.local
+  - jellyfin.homelab.local
+  - jellystat.homelab.local
+  - radarr.homelab.local
+  - sonarr.homelab.local
+  - sabnzbd.homelab.local
+  - readarr.homelab.local
+  - filebrowser.homelab.local
+  - downloader.homelab.local
+  - prowlarr.homelab.local
+  - lidarr.homelab.local
+  - argocd.homelab.local
+  - headlamp.k8s.local
+  - keel.k8s.local
+  - gatus.homelab.local
+  - vaultwarden.homelab.local
+  - pihole.homelab.local
+  - adguard.homelab.local
+  - streamer.homelab.local
+  - pinchflat.homelab.local
+  - registry.homelab.local

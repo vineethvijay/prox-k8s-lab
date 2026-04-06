@@ -1,0 +1,13 @@
+namespace: homepage
+
+image:
+  repository: nicolargo/glances
+  tag: latest-full
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi

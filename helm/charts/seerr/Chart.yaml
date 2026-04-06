@@ -1,0 +1,5 @@
+apiVersion: v2
+name: seerr
+description: Media request management for Plex
+version: 1.0.0
+type: application

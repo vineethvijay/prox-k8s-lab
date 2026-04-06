@@ -1,0 +1,155 @@
+{{- $name := .Chart.Name }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $name }}-repo-password
+type: Opaque
+stringData:
+  password: {{ .Values.repositoryPassword | quote }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    app: {{ $name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: {{ $name }}
+  template:
+    metadata:
+      labels:
+        app: {{ $name }}
+    spec:
+      initContainers:
+        - name: connect-repo
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              CONFIG=/app/config/repository.config
+              if [ -f "$CONFIG" ]; then
+                echo "Config exists, reconnecting..."
+                kopia --config-file="$CONFIG" repository connect filesystem --path=/repo 2>/dev/null && echo "Connected" && exit 0
+              fi
+              echo "Creating new connection..."
+              kopia --config-file="$CONFIG" repository connect filesystem --path=/repo
+          env:
+            - name: KOPIA_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $name }}-repo-password
+                  key: password
+          volumeMounts:
+            - name: repo
+              mountPath: /repo
+              readOnly: true
+            - name: kopia-config
+              mountPath: /app/config
+            - name: kopia-cache
+              mountPath: /app/cache
+      containers:
+        - name: {{ $name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command: ["kopia"]
+          args:
+            - server
+            - start
+            - --config-file=/app/config/repository.config
+            - --address=0.0.0.0:51515
+            - --insecure
+            - --without-password
+            - --readonly
+          env:
+            - name: KOPIA_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $name }}-repo-password
+                  key: password
+          ports:
+            - containerPort: 51515
+              name: http
+          volumeMounts:
+            - name: repo
+              mountPath: /repo
+              readOnly: true
+            - name: kopia-config
+              mountPath: /app/config
+            - name: kopia-cache
+              mountPath: /app/cache
+          startupProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: repo
+          nfs:
+            server: {{ .Values.repository.server }}
+            path: {{ .Values.repository.path }}
+            readOnly: true
+        - name: kopia-config
+          emptyDir: {}
+        - name: kopia-cache
+          emptyDir:
+            sizeLimit: 500Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    app: {{ $name }}
+spec:
+  selector:
+    app: {{ $name }}
+  ports:
+    - port: 51515
+      targetPort: 51515
+      name: http
+{{- if .Values.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $name }}-ingress
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    gethomepage.dev/enabled: "true"
+    gethomepage.dev/group: {{ .Values.ingress.homepage.group | quote }}
+    gethomepage.dev/name: {{ .Values.ingress.homepage.name | quote }}
+    gethomepage.dev/description: {{ .Values.ingress.homepage.description | quote }}
+    gethomepage.dev/icon: {{ .Values.ingress.homepage.icon | quote }}
+    gethomepage.dev/pod-selector: {{ printf "app=%s" $name | quote }}
+spec:
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $name }}
+                port:
+                  number: 51515
+{{- end }}

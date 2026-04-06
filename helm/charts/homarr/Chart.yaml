@@ -1,0 +1,5 @@
+apiVersion: v2
+name: homarr
+description: A modern dashboard for your homelab
+version: 1.0.0
+type: application

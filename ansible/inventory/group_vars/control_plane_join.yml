@@ -1,0 +1,3 @@
+---
+# CP2/CP3 use less memory because they are not the init node
+vm_memory: 3272

@@ -1,0 +1,27 @@
+---
+# nfs-mounts: Set up NFS mounts on worker nodes
+
+- name: Install NFS client
+  become: true
+  ansible.builtin.apt:
+    name: nfs-common
+    state: present
+    update_cache: true
+
+- name: Create NFS mount directories
+  become: true
+  ansible.builtin.file:
+    path: "{{ item.local_path }}"
+    state: directory
+    mode: "0755"
+  loop: "{{ nfs_mounts }}"
+
+- name: Add NFS mounts to fstab
+  become: true
+  ansible.posix.mount:
+    path: "{{ item.local_path }}"
+    src: "{{ item.remote_path }}"
+    fstype: nfs
+    opts: "{{ item.nfs_version }},hard,intr,noatime,async,_netdev"
+    state: mounted
+  loop: "{{ nfs_mounts }}"

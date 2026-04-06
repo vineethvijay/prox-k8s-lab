@@ -1,0 +1,52 @@
+replicaCount: 1
+
+image:
+  repository: lscr.io/linuxserver/tautulli
+  tag: latest
+
+containerPort: 8181
+
+env:
+  PUID: "1000"
+  PGID: "1000"
+  TZ: "Europe/London"
+
+podSecurityContext:
+  fsGroup: 1000
+
+persistence:
+  enabled: true
+  existingClaim: tautulli-config-nfs
+
+ingress:
+  enabled: true
+  host: tautulli.homelab.local
+  homepage:
+    name: Tautulli
+    description: Plex Monitoring
+    icon: tautulli
+    group: Media
+
+service: {}
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+livenessProbe:
+  httpGet:
+    path: /status
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 30
+
+readinessProbe:
+  httpGet:
+    path: /status
+    port: http
+  initialDelaySeconds: 15
+  periodSeconds: 10
